@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Moo;
+use DateTime;
 use MooX::HandlesVia;
 use AnyEvent;
 use AnyEvent::Socket;
@@ -109,32 +110,97 @@ has read_queue => (
   },
 );
 
-has _parser => (
+has _handlers => (
   is => 'ro',
+  isa => HashRef,
   lazy => 1,
   default => sub {
     my $self = shift;
+
     my @lines;
-    return sub {
-      my ($hdl, $line) = @_;
+    return {
+      block => sub {
+        my ($handle) = @_;
 
-      $log->tracef('< %s', $line);
+        my $done = 0;
+        my @buffer = split /\n/, $handle->rbuf;
 
-      chomp($line);
-      if ($line =~ /^OK/) {
-        $self->emit( response => [ { map { split /:\s+/, $_, 2 } @lines } ] );
-        @lines = ();
-      }
-      elsif ($line =~ /^ACK/) {
-        $log->errorf('Error: %s', $line);
-        $self->emit( error => $line );
-        @lines = ();
-      }
-      else {
-        push @lines, $line;
-        $self->handle->push_read( line => $self->_parser );
-      }
-    }
+        while (my $line = shift @buffer) {
+          next unless $line =~ /\w/;
+
+          $log->tracef('< %s', $line);
+          if ($line =~ /^OK/) {
+            if ($line =~ /OK MPD (.*)/) {
+              $log->trace('Connection established');
+              $self->{version} = $1;
+
+              $self->state( 'ready' );
+
+              if (scalar @{$self->subsystems}) {
+                $self->send( idle =>
+                  @{$self->subsystems},
+                  $self->_handlers->{idle},
+                );
+                $self->state( 'waiting' );
+              }
+
+            }
+            else {
+              $done = 1;
+              $self->shift_read->($self, \@lines);
+              @lines = ();
+              last;
+            }
+          }
+          elsif ($line =~ /^ACK/) {
+            $done = 1;
+#             $log->travef('GOT ACK: %s', $line);
+            $self->emit( error => $line );
+            @lines = ();
+            last;
+          }
+          else {
+            push @lines, $line;
+          }
+        }
+
+        if ($done) {
+          $handle->rbuf = q{};
+          return 1;
+        }
+        else {
+          $handle->rbuf = join "\n", @buffer;
+          return [];
+        }
+      },
+      idle => sub {
+        my ($self, $response) = @_;
+
+        # Determine idle event to trigger
+        my $event = $response->[0];
+        $event =~ s/changed: //;
+
+        $log->debugf('[%s] Got an idle event: %s', DateTime->now, $event);
+
+        # Set client as ready to send messages
+        $self->state( 'ready' );
+
+        # Request status update, and emit idle event when status is back
+        $self->send( 'status', sub {
+          shift;
+          $self->emit( $event => shift );
+        });
+
+        # Re-register idle listeners
+        if (scalar @{$self->subsystems}) {
+          $self->send( idle =>
+            @{$self->subsystems},
+            $self->_handlers->{idle},
+          );
+          $self->state( 'waiting' );
+        }
+      },
+    };
   },
 );
 
