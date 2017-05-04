@@ -283,14 +283,42 @@ sub until {
 
 sub get {
   my ($self, $command, @args) = @_;
+  $log->debugf('Blocking command: %s %s', $command, @args);
 
-  $log->tracef('Getting %s', $command);
   my $cv = AnyEvent::condvar;
-  $self->once( response => sub {
+
+  my $error = $self->once( error => sub {
+    $log->warn($_[1]);
+    $cv->send;
+  });
+
+  # Read response to command
+  $self->unshift_read( sub {
     my ($s, $payload) = @_;
+
+    if (scalar @{$self->subsystems}) {
+      $log->debugf('Blocking %s returned', $command);
+
+      $self->send( idle => @{$self->subsystems} );
+      $self->state( 'waiting' );
+    }
+
+    $self->unsubscribe( error => $error );
     $cv->send( clone $payload );
   });
+
+  # Read response to noidle
+  if ($self->state eq 'waiting') {
+    $self->unshift_read( sub { } );
+    $self->send( 'noidle' );
+  }
+
+  # Set client as ready to send
+  $self->state( 'ready' );
+
   $self->send( $command, @args );
+
+  # Block until command returns
   return $cv->recv;
 }
 
