@@ -255,6 +255,22 @@ has _socket => (
   }
 }
 
+sub until {
+  my ($self, $name, $check, $cb) = @_;
+
+  weaken $self;
+  my $wrapper;
+  $wrapper = sub {
+    if ($check->(@_)) {
+      $self->unsubscribe($name => $wrapper);
+      $cb->(@_);
+    }
+  };
+  $self->on($name => $wrapper);
+
+  return $wrapper;
+}
+
 sub get {
   my ($self, $command, @args) = @_;
 
