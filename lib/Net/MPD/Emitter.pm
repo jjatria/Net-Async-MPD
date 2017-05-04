@@ -367,38 +367,9 @@ sub get {
 sub BUILD {
   my ($self, $args) = @_;
 
-  $self->on( response => sub {
-    my ($s, $payload) = @_;
-
-    if (defined $payload->[0]{changed}) {
-      my $event = $payload->[0]{changed};
-      my $current = $self->status->{songid};
-
-      $self->once( status => sub {
-        my ($s, $status) = @_;
-        $log->tracef('Emitting %s', $event);
-        $self->emit( $event => $status );
-
-        $log->tracef('Emitting song');
-        $self->emit( song => $status )
-          if $event eq 'player'
-            and ($current // q{}) ne ($status->{songid} // q{});
-      });
-      $self->send('status');
-
-      $self->send( idle => @{$self->subsystems} );
-    }
-    elsif (defined $payload->[0]{state}) {
-      $log->tracef('Emitting status');
-      $self->emit( status => $payload->[0] );
-    }
-    elsif (defined $payload->[0]{playtime}) {
-      $log->tracef('Emitting stats');
-      $self->emit( stats => $payload->[0] );
-    }
-
-    $self->ready(1);
-    $self->emit('ready');
+  $self->on( state => sub {
+    my ($s, $state) = @_;
+    $log->debugf('Client is %s', $state);
   });
 
   my $cv = AnyEvent->condvar;
