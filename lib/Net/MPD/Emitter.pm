@@ -4,12 +4,13 @@ use strict;
 use warnings;
 
 use Moo;
+use MooX::HandlesVia;
 use AnyEvent;
 use AnyEvent::Socket;
 use Clone qw( clone );
 use DDP;
 use Net::MPD;
-use Types::Standard qw( InstanceOf Int ArrayRef HashRef Str Maybe Bool );
+use Types::Standard qw( InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef );
 extends 'AnyEvent::Emitter';
 
 use Log::Any;
@@ -92,6 +93,20 @@ has subsystems => (
 has handle => (
   is => 'rw',
   lazy => 1,
+);
+
+has read_queue => (
+  is => 'ro',
+  isa => ArrayRef [CodeRef],
+  lazy => 1,
+  default => sub { [] },
+  handles_via => 'Array',
+  handles => {
+    push_read    => 'push',
+    pop_read     => 'pop',
+    shift_read   => 'shift',
+    unshift_read => 'unshift',
+  },
 );
 
 has _parser => (
