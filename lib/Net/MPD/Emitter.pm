@@ -208,7 +208,7 @@ has _socket => (
   is => 'rw',
   default => sub {
     my ($self) = @_;
-    $log->infof('Connecting to %s:%s', $self->host, $self->port);
+    $log->debugf('Connecting to %s:%s', $self->host, $self->port);
     return tcp_connect $self->host, $self->port, sub {
       my ($fh) = @_
         or die "MPD connect failed: $!";
