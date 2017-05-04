@@ -225,113 +225,43 @@ has _socket => (
       );
 
       $self->handle->on_read(sub {
-        $self->handle->push_read( line => sub {
-          my ($h, $version) = @_;
-          $log->trace('Connection established');
-          $log->tracef('<<< %s', $version);
-          $version =~ s/OK MPD (.*)/$1/;
-          $self->{version} = $version;
+        $self->handle->push_read( $self->_handlers->{block} )
+      });
 
-          $self->send( idle => @{$self->subsystems} )
-            if scalar @{$self->subsystems};
+      $self->handle->on_error(sub {
+        my ($h, $fatal, $message) = @_;
+        $self->emit( error => $message // '!!!' );
+#         $self->handle(undef);
+      });
 
-          $self->ready(1);
-          $log->trace('Setting ready');
-          $self->emit( 'ready' );
-        });
+      $self->handle->on_eof(sub {
+        my ($h, $fatal, $message) = @_;
+        $self->emit( error => 'EOF: ' . ($message // '???') );
+#         $self->handle(undef);
       });
 
     };
   },
 );
 
-{
-  my @use_song_parser = qw(
-    find listall listallinfo listplaylist listplaylistinfo playlistinfo lsinfo
-    search playlistfind playlistid playlistinfo playlistsearch playlistchanges
-    currentsong
-  );
-  my @use_decoder_parser = qw( decoders );
+sub send {
+  my ($self, $command, @args) = @_;
 
-  my @list;
-  my $item = {};
+  $self->push_read( pop @args ) if ref $args[-1] eq 'CODE';
 
-  sub send {
-    my ($self, $command, @args) = @_;
+  my $writer = sub {
+    my $cmd = sprintf "%s %s", $command, join q{ }, @args;
+    $log->tracef('> %s', $cmd);
 
-    my $cb;
-    my ($song_parser, $decoder_parser);
+    $self->handle->push_read( $self->_handlers->{block} );
+    $self->handle->push_write( "$cmd\n" );
+  };
 
-    $song_parser = sub {
-      my ($hdl, $line) = @_;
-
-      if ($line =~ /^OK/) {
-        push @list, $item;
-        $self->emit( response => \@list );
-        @list = ();
-      }
-      elsif ($line =~ /^ACK/) {
-        $self->emit( error => $line );
-      }
-      else {
-        my ($key, $value) = split /: /, $line, 2;
-        $key = lc($key);
-
-        if ($key =~ /^(?:file|directory|playlist)$/) {
-          push @list, $item if exists $item->{type};
-          $item = { type => $key, uri => $value };
-        } else {
-          $item->{$key} = $value;
-        }
-
-        $self->handle->push_read( line => $cb );
-      }
-    };
-
-    $decoder_parser = sub {
-      my ($hdl, $line) = @_;
-
-      if ($line =~ /^OK/) {
-        push @list, $item;
-        $self->emit( response => \@list );
-        @list = ();
-      }
-      elsif ($line =~ /^ACK/) {
-        $self->emit( error => $line );
-      }
-      else {
-        my ($key, $value) = split /: /, $line, 2;
-        $key = lc($key);
-
-        if ($key eq 'plugin') {
-          push @list, $item if exists $item->{name};
-          $item = { name => $value };
-        } else {
-          push @{$item->{$key}}, $value;
-        }
-
-        $self->handle->push_read( line => $cb );
-      }
-    };
-
-    $cb = (ref $args[-1] eq 'CODE')
-      ? pop @args
-      : (grep { $_ eq $command } @use_song_parser)
-        ? $song_parser
-        : (grep { $_ eq $command } @use_decoder_parser)
-          ? $decoder_parser
-          : $self->_parser;
-
-    my $writer = sub {
-      my $cmd = sprintf "%s %s", $command, join q{ }, @args;
-      $log->tracef('> %s', $cmd);
-      $self->ready(0);
-      $self->handle->push_read( line => $cb );
-      $self->handle->push_write( "$cmd\n" );
-    };
-
-    if ($self->ready) { $writer->() }
-    else { $self->once( ready => $writer ) }
+  if ($self->state eq 'ready' ) {
+    $writer->()
+  }
+  else {
+    $self->until( state => sub { $_[1] eq 'ready' }, $writer );
   }
 }
 
