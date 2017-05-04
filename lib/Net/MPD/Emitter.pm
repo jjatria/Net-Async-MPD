@@ -24,6 +24,12 @@ has version => (
   lazy => 1,
 );
 
+has keep_alive => (
+  is => 'ro',
+  isa => Bool,
+  default => 0,
+);
+
 has state => (
   is => 'rw',
   isa => Str,
@@ -68,6 +74,20 @@ has _uri => (
       ( $self->password ? $self->password . '@' : q{} )
     . $self->host
     . ( $self->port     ? ':' . $self->port     : q{} )
+  },
+);
+
+has _ping => (
+  is => 'ro',
+  init_arg => undef,
+  lazy => 1,
+  default => sub {
+    my $self = shift;
+    AnyEvent->timer(
+      after    => 30,
+      interval => 30,
+      cb       => sub { $self->send('ping', sub {} ) },
+    );
   },
 );
 
@@ -325,6 +345,8 @@ sub get {
 
 sub BUILD {
   my ($self, $args) = @_;
+
+  $self->_ping if $self->keep_alive;
 
   $self->on( state => sub {
     my ($s, $state) = @_;
