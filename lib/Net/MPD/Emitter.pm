@@ -400,6 +400,12 @@ sub BUILD {
     $self->ready(1);
     $self->emit('ready');
   });
+
+  my $cv = AnyEvent->condvar;
+  $self->until( state => sub { $_[1] eq 'ready' }, sub {
+    $cv->send;
+  });
+  $cv->recv;
 }
 
 1;
