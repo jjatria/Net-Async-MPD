@@ -21,10 +21,13 @@ has version => (
   lazy => 1,
 );
 
-has ready => (
+has state => (
   is => 'rw',
-  isa => Bool,
-  default => 0,
+  isa => Str,
+  default => 'created',
+  trigger => sub {
+    $_[0]->emit( state => $_[0]->{state} );
+  },
 );
 
 has status => (
@@ -268,11 +271,6 @@ sub get {
 sub BUILD {
   my ($self, $args) = @_;
   $self->_socket;
-
-  $self->on( status => sub {
-    my ($s, $status) = @_;
-    $self->status($status);
-  });
 
   $self->on( response => sub {
     my ($s, $payload) = @_;
