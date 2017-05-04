@@ -206,7 +206,6 @@ has _handlers => (
 
 has _socket => (
   is => 'rw',
-  lazy => 1,
   default => sub {
     my ($self) = @_;
     $log->infof('Connecting to %s:%s', $self->host, $self->port);
@@ -367,7 +366,6 @@ sub get {
 
 sub BUILD {
   my ($self, $args) = @_;
-  $self->_socket;
 
   $self->on( response => sub {
     my ($s, $payload) = @_;
