@@ -8,6 +8,7 @@ use DateTime;
 use MooX::HandlesVia;
 use AnyEvent;
 use AnyEvent::Socket;
+use AnyEvent::Handle;
 use Clone qw( clone );
 use DDP;
 use Net::MPD;
