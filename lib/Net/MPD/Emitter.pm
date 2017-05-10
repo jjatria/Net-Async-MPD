@@ -12,7 +12,9 @@ use AnyEvent::Handle;
 use Clone qw( clone );
 use DDP;
 use Net::MPD;
-use Types::Standard qw( InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef );
+use Types::Standard qw(
+  InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
+);
 extends 'AnyEvent::Emitter';
 
 use Log::Any;
@@ -227,6 +229,7 @@ has _handlers => (
 
 has _socket => (
   is => 'rw',
+  lazy => 1,
   default => sub {
     my ($self) = @_;
     $log->debugf('Connecting to %s:%s', $self->host, $self->port);
@@ -257,8 +260,8 @@ has _socket => (
 
       $self->handle->on_eof(sub {
         my ($h, $fatal, $message) = @_;
-        $self->emit( error => 'EOF: ' . ($message // '???') );
-#         $self->handle(undef);
+        $self->emit( 'close' );
+        $self->handle(undef);
       });
 
     };
@@ -346,6 +349,7 @@ sub get {
 sub BUILD {
   my ($self, $args) = @_;
 
+  $self->_socket;
   $self->_ping if $self->keep_alive;
 
   $self->on( state => sub {
