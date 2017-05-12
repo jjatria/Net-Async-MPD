@@ -342,7 +342,7 @@ sub send {
 
   $self->push_read( sub {
     my $response = shift;
-    $cv->send( ( $opt->{raw} ) ? $response : $parser->( $response ) );
+    $cv->send( $parser->( $response ) );
   });
 
   $log->tracef( '> %s', $_ ) foreach @commands;
