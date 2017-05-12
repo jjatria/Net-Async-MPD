@@ -11,6 +11,7 @@ use PerlX::Maybe;
 
 my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
+  auto_connect => 1,
 );
 
 my $total_length = 10;

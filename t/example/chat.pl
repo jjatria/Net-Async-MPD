@@ -10,10 +10,10 @@ use AnyEvent;
 my %accounts = (
   alice => AnyEvent::Net::MPD->new(
     maybe host => $ARGV[0],
-  ),
+  )->connect,
   bob => AnyEvent::Net::MPD->new(
     maybe host => $ARGV[0],
-  ),
+  )->connect,
 );
 
 # Accounts have a channel of their own that they send messages to

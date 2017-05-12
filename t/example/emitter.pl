@@ -9,6 +9,7 @@ my $log = Log::Any->get_logger;
 
 my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
+  auto_connect => 1,
 );
 
 foreach my $event (qw(

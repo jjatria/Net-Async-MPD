@@ -10,6 +10,7 @@ use Data::Printer output => 'stdout';
 
 my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
+  auto_connect => 1,
 );
 
 print "Connected to MPD (v", $mpd->version, ")\n";

@@ -31,7 +31,7 @@ has version => (
 has auto_connect => (
   is => 'ro',
   isa => Bool,
-  default => 1,
+  default => 0,
 );
 
 has state => (
