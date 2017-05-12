@@ -5,11 +5,11 @@ use warnings;
 
 use List::Util qw( shuffle );
 use Array::Utils qw( array_minus );
-use Net::MPD::Emitter;
+use AnyEvent::Net::MPD;
 use AnyEvent;
 use PerlX::Maybe;
 
-my $mpd = Net::MPD::Emitter->new(
+my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
 );
 

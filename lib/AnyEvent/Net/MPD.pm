@@ -1,4 +1,4 @@
-package Net::MPD::Emitter;
+package AnyEvent::Net::MPD;
 
 use strict;
 use warnings;
@@ -104,7 +104,6 @@ has [qw( handle socket )] => ( is => 'rw' );
             $self->state( 'ready' );
           }
           else {
-            $log->trace('Got response');
             $self->shift_read->( \@buffer );
             @buffer = ();
           }
@@ -287,6 +286,9 @@ sub send {
       ( ref $_ eq 'ARRAY' ) ? join( q{ }, @{$_} ) : $_;
     } @{$commands[0]};
   }
+  else {
+    @commands = join q{ }, @commands;
+  }
 
   my $command = '';
   # Remove underscores from command names
@@ -430,14 +432,14 @@ __END__
 
 =head1 NAME
 
-Net::MPD::Emitter - A non-blocking interface to MPD
+AnyEvent::Net::MPD - A non-blocking interface to MPD
 
 =head1 SYNOPSIS
 
   use AnyEvent;
-  use Net::MPD::Emitter;
+  use AnyEvent::Net::MPD;
 
-  my $mpd = Net::MPD::Emitter->new( host => $host );
+  my $mpd = AnyEvent::Net::MPD->new( host => $host );
 
   # Register a listener
   $mpd->on( song => sub {
@@ -456,7 +458,7 @@ Net::MPD::Emitter - A non-blocking interface to MPD
 
 =head1 DESCRIPTION
 
-Net::MPD::Emitter provides a non-blocking interface to an MPD server.
+AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
 
 =head1 ATTRIBUTES
 

@@ -3,12 +3,12 @@
 use strict;
 use warnings;
 
-use Net::MPD::Emitter;
+use AnyEvent::Net::MPD;
 use Term::ReadLine;
 use PerlX::Maybe;
 use Data::Printer output => 'stdout';
 
-my $mpd = Net::MPD::Emitter->new(
+my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
 );
 
