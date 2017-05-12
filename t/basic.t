@@ -1,8 +1,8 @@
 use Test::More;
 use Test::Warnings;
 
-use Net::MPD::Emitter;
+use AnyEvent::Net::MPD;
 
-ok my $mpd = Net::MPD::Emitter->new, 'constructor succeeds';
+ok my $mpd = AnyEvent::Net::MPD->new, 'constructor succeeds';
 
 done_testing();
