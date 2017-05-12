@@ -417,13 +417,6 @@ sub _build_socket {
   return $socket;
 }
 
-sub reconnect {
-  my $self = shift;
-  $self->socket( undef );
-  $self->socket( $self->_build_socket );
-  return $self;
-}
-
 sub connect {
   my ($self) = @_;
 
