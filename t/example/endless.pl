@@ -5,8 +5,8 @@ use warnings;
 
 use List::Util qw( shuffle );
 use Array::Utils qw( array_minus );
-use AnyEvent::Net::MPD;
 use AnyEvent;
+use AnyEvent::Net::MPD;
 use PerlX::Maybe;
 
 my $mpd = AnyEvent::Net::MPD->new(
@@ -14,7 +14,10 @@ my $mpd = AnyEvent::Net::MPD->new(
   auto_connect => 1,
 );
 
-my $total_length = 10;
+# use Log::Any::Adapter;
+# Log::Any::Adapter->set('Stderr');
+
+my $total_length = 21;
 my $n = 1;
 my $previous = -1;
 
@@ -26,15 +29,15 @@ my $idle; $idle = sub {
     if ($current ne $previous) {
       $previous = $current;
 
-      $mpd->send( 'playlist_info', sub {
-        my $playlist = shift->recv;
-        my @current =
-          map { $_->{file} } grep { defined $_->{file} } @{$playlist};
+      $mpd->send( 'playlist', sub {
+        my @playlist = @{shift->recv};
 
         # I wish there was a smarter way
         $mpd->send( { parser => 'none' }, 'list_all', sub {
-          my $list = shift->recv;
-          my @files = map { (split /:\s+/, $_, 2)[1] } grep { /^file:/ } @{$list};
+          my @files =
+            map { (split /:\s+/, $_, 2)[1] }
+            grep { /^file:/ }
+            @{shift->recv};
 
           my $all_new = 1;
           my @new;
@@ -42,7 +45,7 @@ my $idle; $idle = sub {
             my @indeces = shuffle( 0..$#files );
             @new = @files[ @indeces[ 0 .. $n-1 ] ];
 
-            my @diff = array_minus( @new, @current );
+            my @diff = array_minus( @new, @playlist );
             if (scalar @diff eq $n) { last }
             else { $all_new = 0 }
           }
@@ -50,13 +53,11 @@ my $idle; $idle = sub {
           warn 'Some of the added songs already exist in the playlist!'
             unless $all_new;
 
-          my $end = scalar @{$playlist};
-          foreach my $file (@new) {
-            $mpd->send( addid => $file, $end );
-            $end++;
-          };
+          my $end = scalar @playlist;
+          my @commands = map { [ addid => $_, $end++ ] } @new;
+          push @commands, [ delete => "0:$n" ];
 
-          $mpd->send( delete => "0:$n", sub {
+          $mpd->send( \@commands , sub {
             $mpd->send( idle => 'player' , $idle );
           });
         });
