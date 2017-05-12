@@ -21,4 +21,4 @@ foreach my $event (qw(
   });
 }
 
-$mpd->emitter->recv;
+$mpd->idle->recv;

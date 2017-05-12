@@ -276,6 +276,33 @@ my $parsers = { none => sub { @_ } };
   };
 }
 
+{
+  my $cv;
+
+  sub idle {
+    my ($self, @subsystems) = @_;
+
+    $cv = AnyEvent->condvar;
+
+    my $idle;
+    $idle = sub {
+      my $o = shift->recv;
+      $self->emit( $o->{changed} );
+      $self->send( idle => @subsystems, $idle ) unless $cv->ready;
+    };
+    $self->send( idle => @subsystems, $idle );
+
+    return $cv;
+  }
+
+  sub noidle {
+    my ($self) = @_;
+    $idlecv->send if $cv;
+    $self->send( 'noidle' );
+    return $self;
+  }
+}
+
 sub send {
   my $self = shift;
   my $opt  = ( ref $_[0] eq 'HASH' ) ? shift : {};
@@ -409,21 +436,6 @@ sub connect {
   $cv->recv;
 
   return $self;
-}
-
-sub emitter {
-  my ($self, @subsystems) = @_;
-
-  my $cv = AnyEvent->condvar;
-  my $idle;
-  $idle = sub {
-    my $o = shift->recv;
-    $self->emit( $o->{changed} );
-    $self->send( idle => @subsystems, $idle );
-  };
-  $self->send( idle => @subsystems, $idle );
-
-  return $cv;
 }
 
 1;
