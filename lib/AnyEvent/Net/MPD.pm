@@ -12,7 +12,7 @@ extends 'AnyEvent::Emitter';
 use AnyEvent;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
-use PerlX::Maybe;
+
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
 );
@@ -340,7 +340,7 @@ sub send {
   my $parser = $opt->{parser} // $command;
   $parser = $parsers->{$parser} // $parsers->{none};
 
-  my $cv = AnyEvent->condvar( maybe cb => $cb );
+  my $cv = AnyEvent->condvar( $cb ? ( cb => $cb ) : () );
 
   $self->push_read( sub {
     my $response = shift;
