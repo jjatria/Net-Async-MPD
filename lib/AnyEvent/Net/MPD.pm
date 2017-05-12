@@ -12,7 +12,6 @@ extends 'AnyEvent::Emitter';
 use AnyEvent;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
-use Clone qw( clone );
 use PerlX::Maybe;
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
