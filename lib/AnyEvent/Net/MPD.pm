@@ -299,7 +299,7 @@ my $parsers = { none => sub { @_ } };
 
   sub noidle {
     my ($self) = @_;
-    $idlecv->send if $cv;
+    $cv->send if $cv;
     $self->send( 'noidle' );
     return $self;
   }
