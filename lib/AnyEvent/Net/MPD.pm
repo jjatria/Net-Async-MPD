@@ -25,6 +25,7 @@ has version => (
   is => 'ro',
   isa => Str,
   lazy => 1,
+  init_arg => undef,
 );
 
 has auto_connect => (
@@ -36,6 +37,7 @@ has auto_connect => (
 has state => (
   is => 'rw',
   isa => Str,
+  init_arg => undef,
   default => 'created',
   trigger => sub {
     $_[0]->emit( state => $_[0]->{state} );
@@ -46,6 +48,7 @@ has read_queue => (
   is => 'ro',
   isa => ArrayRef [CodeRef],
   lazy => 1,
+  init_arg => undef,
   default => sub { [] },
   handles_via => 'Array',
   handles => {
@@ -88,7 +91,7 @@ has _uri => (
   },
 );
 
-has [qw( handle socket )] => ( is => 'rw' );
+has [qw( handle socket )] => ( is => 'rw', init_arg => undef, );
 
 {
   my @buffer;
