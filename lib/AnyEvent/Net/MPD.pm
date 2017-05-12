@@ -3,6 +3,8 @@ package AnyEvent::Net::MPD;
 use strict;
 use warnings;
 
+our $VERSION = '0';
+
 use Moo;
 use MooX::HandlesVia;
 extends 'AnyEvent::Emitter';
