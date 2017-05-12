@@ -446,25 +446,40 @@ AnyEvent::Net::MPD - A non-blocking interface to MPD
 
 =head1 SYNOPSIS
 
-  use AnyEvent;
   use AnyEvent::Net::MPD;
 
-  my $mpd = AnyEvent::Net::MPD->new( host => $host );
+  my $mpd = AnyEvent::Net::MPD->new( host => $ARGV[0] )->connect;
+
+  my @subsystems = qw( player mixer database );
 
   # Register a listener
-  $mpd->on( song => sub {
-    my ($self, $status) = @_;
-    print "The song has changed\n";
-  });
+  foreach my $subsystem (@subsystems) {
+    $mpd->on( $subsystem => sub {
+      my ($self) = @_;
+      print "$subsystem has changed\n";
+
+      # Stop listening if mixer changes
+      $mpd->noidle if $subsystem eq 'mixer';
+    });
+  }
 
   # Send a command
-  $mpd->send( 'next' );
+  my $stats = $mpd->send( 'stats' );
 
   # Or in blocking mode
-  # Although you should probably not mix the two interfaces
-  my $status = $mpd->get( 'status');
+  my $status = $mpd->send( 'status' )->recv;
 
-  AnyEvent->condvar->recv;
+  # Which is the same as
+  $status = $mpd->get( 'status' );
+
+  print "Server is ", $status->{state}, " state\n";
+  print "Server has ", $stats->recv->{albums}, " albums in the database\n";
+
+  # Put the client in looping idle mode
+  my $idle = $mpd->idle( @subsystems );
+
+  # Set the emitter in motion, until the next call to noidle
+  $idle->recv;
 
 =head1 DESCRIPTION
 
@@ -476,33 +491,126 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
 
 =item B<host>
 
-=item B<subsystems>
-
-=item B<events>
+The host to connect to. Defaults to B<localhost>.
 
 =item B<port>
 
+The port to connect to. Defaults to B<6600>.
+
 =item B<password>
+
+The password to use to connect to the server. Defaults to undefined, which
+means to use no password.
+
+=item B<auto_connect>
+
+If set to true, the constructor will block until the connection to the MPD
+server has been established. Defaults to false.
+
+=back
+
+=head1 METHODS
+
+=over 4
+
+=item B<connect>
+
+If the client is not connected, wait until it is. Otherwise, do nothing.
+Returns the client itself;
+
+=item B<send>
+
+Send a command to the server in a non-blocking way. This command always returns
+an L<AnyEvent> condvar.
+
+If called with a single string, then that string will be sent as the command.
+
+If called with a list, the list will be joined with spaces and sent as the
+command.
+
+If called with an array reference, then the value of each of item in that array
+will be processed as above. If the referenced array contains more than one
+command, then these will be sent to the server as a command list.
+
+An optional subroutine reference passed as the last argument will be passed to
+the condvar constructor, and fire when the condvar is ready (= when there is a
+response from the server).
+
+The response from the server will be parsed with a command-specific parser, to
+provide some structure to the flat lists returned by MPD. If no parser is
+found, or if the user specifically asks for no parser to be used (see below),
+then the response will be an array reference with the raw lines from the server.
+
+Finally, a hash reference with additional options can be passed as the I<first>
+argument. Valid keys to use are:
+
+For ease of use, underscores in the final command name will be removed before
+sending to the server (unless the command name requires them).
+
+=over 4
+
+=item B<parser>
+
+Specify the parser to use for the response. Parser labels are MPD commands. If
+the requested parser is not found, the fallback C<none> will be used.
+
+=back
+
+=item B<get>
+
+Send a command in a blocking way. Internally calls B<send> and immediately
+waits for the response.
+
+=item B<idle>
+
+Put the client in idle loop. This sends the C<idle> command and registers an
+internal listener that will put the client back in idle mode after each server
+response.
+
+If called with a list of subsystem names, then the client will only listen to
+those subsystems. Otherwise, it will listen to all of them.
+
+If you are using this module for an event-based application (see below), this
+will configure the client to fire the events at the appropriate times.
+
+Returns an L<AnyEvent> condvar. Blocking on this conditional variable will wait
+until the next call to B<noidle> (see below).
+
+=item B<noidle>
+
+Cancel the client's idle mode. Sends an undefined value to the condvar created
+by B<idle> and breaks the internal idle loop.
 
 =back
 
 =head1 EVENTS
 
-There are events per subsystem:
+After calling B<idle>, the client will be in idle mode, which means that any
+changes to the specified subsystemswill trigger a signal. When the client
+receives this signal, it will fire an event named as the subsystem that fired
+it.
+
+The event will be fired with the client as the first argument, and the response
+from the server as the second argument. This can safely be ignored, since the
+server response will normally just hold the name of the subsystem that changed,
+which you already know.
+
+Event descriptions
 
 =over 4
 
 =item B<database>
 
-The song database has been changed after an update.
+The song database has been changed after B<update>.
 
 =item B<udpate>
 
-A database update has started or finished.
+A database update has started or finished. If the database was modified during
+the update, the B<database> event is also emitted.
 
 =item B<stored_playlist>
 
-A stored playlist has been modified.
+A stored playlist has been modified, renamed, created or deleted.
 
 =item B<playlist>
 
@@ -510,15 +618,24 @@ The current playlist has been modified.
 
 =item B<player>
 
-Playback has been started stopped or seeked.
+The player has been started stopped or seeked.
 
 =item B<mixer>
 
-The volume has been adjusted.
+The volume has been changed.
 
 =item B<output>
 
-An audio output has been enabled or disabled.
+An audio output has been added, removed or modified (e.g. renamed, enabled or
+disabled)
+
+=item B<options>
+
+Options like repeat, random, crossfade, replay gain.
+
+=item B<partition>
+
+A partition was added, removed or changed.
 
 =item B<sticker>
 
@@ -530,23 +647,33 @@ A client has subscribed or unsubscribed from a channel.
 
 =item B<message>
 
-A message was received on a channel this client is watching.
+A message was received on a channel this client is subscribed to.
 
 =back
 
-As well as some events specifc to this distribution:
+=head1 SEE ALSO
 
 =over 4
 
-=item B<song>
+=item * L<Net::MPD>
 
-=item B<status>
+A lightweight blocking MPD library. Has fewer dependencies than this one, but
+it does not curently support command lists. I took the idea of allowing for
+underscores in command names from this module.
 
-=item B<stats>
+=item * L<Audio::MPD>
 
-=item B<response>
+The first MPD library on CPAN. This one also blocks and is based on L<Moose>.
+However, it seems to be unmaintained at the moment.
 
-=item B<error>
+=item * L<Dancer::Plugin::MPD>
+
+A L<Dancer> plugin to connect to MPD. Haven't really tried it, since I
+haven't used Dancer...
+
+=item * L<POE::Component::Client::MPD>
+
+A L<POE> component to connect to MPD. This uses Audio::MPD in the background.
 
 =back
 
