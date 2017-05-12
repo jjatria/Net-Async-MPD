@@ -4,21 +4,20 @@ use strict;
 use warnings;
 
 use Moo;
-use DateTime;
 use MooX::HandlesVia;
+extends 'AnyEvent::Emitter';
+
 use AnyEvent;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
 use Clone qw( clone );
-use DDP;
-use Net::MPD;
+use PerlX::Maybe;
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
 );
-extends 'AnyEvent::Emitter';
 
 use Log::Any;
-my $log = Log::Any->get_logger( category => 'MPD' );
+my $log = Log::Any->get_logger( category => __PACKAGE__ );
 
 has version => (
   is => 'ro',
@@ -26,10 +25,10 @@ has version => (
   lazy => 1,
 );
 
-has keep_alive => (
+has auto_connect => (
   is => 'ro',
   isa => Bool,
-  default => 0,
+  default => 1,
 );
 
 has state => (
@@ -41,10 +40,18 @@ has state => (
   },
 );
 
-has status => (
-  is => 'rw',
-  isa => HashRef,
-  default => sub { {} },
+has read_queue => (
+  is => 'ro',
+  isa => ArrayRef [CodeRef],
+  lazy => 1,
+  default => sub { [] },
+  handles_via => 'Array',
+  handles => {
+    push_read    => 'push',
+    pop_read     => 'pop',
+    shift_read   => 'shift',
+    unshift_read => 'unshift',
+  },
 );
 
 has password => (
@@ -79,215 +86,241 @@ has _uri => (
   },
 );
 
-has _ping => (
-  is => 'ro',
-  init_arg => undef,
-  lazy => 1,
-  default => sub {
+has [qw( handle socket )] => ( is => 'rw' );
+
+{
+  my @buffer;
+  sub _parse_block {
     my $self = shift;
-    AnyEvent->timer(
-      after    => 30,
-      interval => 30,
-      cb       => sub { $self->send('ping', sub {} ) },
-    );
-  },
-);
+    return sub {
+      my ($handle, $line) = @_;
 
-has event_names => (
-  is => 'ro',
-  isa => ArrayRef,
-  lazy => 1,
-  init_args => 'events',
-  default => sub { [
-    @{$_[0]->subsystems},
-    qw( status stats song )
-  ] },
-);
-
-has subsystems => (
-  is => 'ro',
-  isa => ArrayRef,
-  lazy => 1,
-  default => sub { [ qw(
-    playlist update stored_playlist player mixer
-    output sticker subscription message
-  ) ] },
-);
-
-has handle => (
-  is => 'rw',
-  lazy => 1,
-);
-
-has read_queue => (
-  is => 'ro',
-  isa => ArrayRef [CodeRef],
-  lazy => 1,
-  default => sub { [] },
-  handles_via => 'Array',
-  handles => {
-    push_read    => 'push',
-    pop_read     => 'pop',
-    shift_read   => 'shift',
-    unshift_read => 'unshift',
-  },
-);
-
-has _handlers => (
-  is => 'ro',
-  isa => HashRef,
-  lazy => 1,
-  default => sub {
-    my $self = shift;
-
-    my @lines;
-    return {
-      block => sub {
-        my ($handle) = @_;
-
-        my $done = 0;
-        my @buffer = split /\n/, $handle->rbuf;
-
-        while (my $line = shift @buffer) {
-          next unless $line =~ /\w/;
-
-          $log->tracef('< %s', $line);
-          if ($line =~ /^OK/) {
-            if ($line =~ /OK MPD (.*)/) {
-              $log->trace('Connection established');
-              $self->{version} = $1;
-
-              $self->state( 'ready' );
-
-              if (scalar @{$self->subsystems}) {
-                $self->send( idle =>
-                  @{$self->subsystems},
-                  $self->_handlers->{idle},
-                );
-                $self->state( 'waiting' );
-              }
-
-            }
-            else {
-              $done = 1;
-              $self->shift_read->($self, \@lines);
-              @lines = ();
-              last;
-            }
-          }
-          elsif ($line =~ /^ACK/) {
-            $done = 1;
-#             $log->travef('GOT ACK: %s', $line);
-            $self->emit( error => $line );
-            @lines = ();
-            last;
+      if ($line =~ /\w/) {
+        $log->tracef('< %s', $line);
+        if ($line =~ /^OK/) {
+          if ($line =~ /OK MPD (.*)/) {
+            $log->trace('Connection established');
+            $self->{version} = $1;
+            $self->state( 'ready' );
           }
           else {
-            push @lines, $line;
+            $log->trace('Got response');
+            $self->shift_read->( \@buffer );
+            @buffer = ();
           }
         }
-
-        if ($done) {
-          $handle->rbuf = q{};
-          return 1;
+        elsif ($line =~ /^ACK/) {
+          return $self->emit(error => $line );
+          @buffer = ();
         }
         else {
-          $handle->rbuf = join "\n", @buffer;
-          return [];
+          push @buffer, $line;
         }
-      },
-      idle => sub {
-        my ($self, $response) = @_;
+      }
 
-        # Determine idle event to trigger
-        my $event = $response->[0];
-        $event =~ s/changed: //;
-
-        $log->debugf('[%s] Got an idle event: %s', DateTime->now, $event);
-
-        # Set client as ready to send messages
-        $self->state( 'ready' );
-
-        # Request status update, and emit idle event when status is back
-        $self->send( 'status', sub {
-          shift;
-          $self->emit( $event => shift );
-        });
-
-        # Re-register idle listeners
-        if (scalar @{$self->subsystems}) {
-          $self->send( idle =>
-            @{$self->subsystems},
-            $self->_handlers->{idle},
-          );
-          $self->state( 'waiting' );
-        }
-      },
+      $handle->push_read( line => $self->_parse_block );
     };
-  },
-);
-
-has _socket => (
-  is => 'rw',
-  lazy => 1,
-  default => sub {
-    my ($self) = @_;
-    $log->debugf('Connecting to %s:%s', $self->host, $self->port);
-    return tcp_connect $self->host, $self->port, sub {
-      my ($fh) = @_
-        or die "MPD connect failed: $!";
-
-      $self->handle(
-        AnyEvent::Handle->new(
-          fh => $fh,
-          on_error => sub {
-            my ($hdl, $fatal, $msg) = @_;
-            $self->emit( error => $msg );
-            $hdl->destroy;
-          },
-        )
-      );
-
-      $self->handle->on_read(sub {
-        $self->handle->push_read( $self->_handlers->{block} )
-      });
-
-      $self->handle->on_error(sub {
-        my ($h, $fatal, $message) = @_;
-        $self->emit( error => $message // '!!!' );
-#         $self->handle(undef);
-      });
-
-      $self->handle->on_eof(sub {
-        my ($h, $fatal, $message) = @_;
-        $self->emit( 'close' );
-        $self->handle(undef);
-      });
-
-    };
-  },
-);
-
-sub send {
-  my ($self, $command, @args) = @_;
-
-  $self->push_read( pop @args ) if ref $args[-1] eq 'CODE';
-
-  my $writer = sub {
-    my $cmd = sprintf "%s %s", $command, join q{ }, @args;
-    $log->tracef('> %s', $cmd);
-
-    $self->handle->push_read( $self->_handlers->{block} );
-    $self->handle->push_write( "$cmd\n" );
-  };
-
-  if ($self->state eq 'ready' ) {
-    $writer->()
-  }
-  else {
-    $self->until( state => sub { $_[1] eq 'ready' }, $writer );
   }
 }
+
+# Set up response parsers for each command
+my $parsers = { none => sub { @_ } };
+{
+  my $item = sub {
+    return { map {
+      my ($key, $value) = split /: /, $_, 2;
+      $key => $value;
+    } @{$_[0]} };
+  };
+
+  my $flat_list = sub { [ map { (split /: /, $_, 2)[1] } @{$_[0]} ] };
+
+  my $base_list = sub {
+    my @main_keys = @{shift()};
+    my @list_keys = @{shift()};
+    my @lines     = @{shift()};
+
+    my @return;
+    my $item = {};
+
+    foreach my $line (@lines) {
+      my ($key, $value) = split /: /, $line, 2;
+
+      if ( grep { /$key/ } @main_keys ) {
+        push @return, $item if defined $item->{$key};
+        $item = { $key => $value };
+      }
+      elsif ( grep { /$key/ } @list_keys ) {
+        unless (defined $item->{$key}) {
+          $item->{$key} = []
+        }
+        push @{$item->{$key}}, $value;
+      }
+      else {
+        $item->{$key} = $value;
+      }
+    }
+    push @return, $item if keys %{$item};
+
+    return \@return;
+  };
+
+  my $grouped_list = sub {
+    my @lines = @{shift()};
+
+    # What we are grouping
+    my ($main) = split /:\s+/, $lines[0], 2;
+
+    # How we are grouping, from top to bottom
+    my (@categories, %categories);
+    foreach (@lines) {
+      my ($key) = split /:\s+/, $_, 2;
+
+      if ($key ne $main) {
+        push @categories, $key unless defined $categories{$key};
+        $categories{$key} = 1;
+      }
+    }
+
+    my $return = {};
+    my $item;
+    foreach my $line (@lines) {
+      my ($key, $value) = split /:\s+/, $line, 2;
+
+      if (defined $item->{$key}) {
+        # Find the appropriate list of items or create a new one
+        # and populate it
+        my $pointer = $return;
+        foreach my $key (@categories) {
+          my $val = $item->{$key} // q{};
+          $pointer->{$key}{$val} = {} unless defined $pointer->{$key}{$val};
+          $pointer = $pointer->{$key}{$val};
+        }
+        $pointer->{$main} = [] unless defined $pointer->{$main};
+        my $list = $pointer->{$main};
+
+        push @{$list}, delete $item->{$main};
+
+        # Start a new item
+        $item = { $key => $value };
+        next;
+      }
+
+      $item->{$key} = $value;
+    }
+    return $return;
+  };
+
+  # Untested commands: what do they return?
+  # consume
+  # crossfade
+
+  my $file_list = sub { $base_list->( [qw( directory file )], [], @_ ) };
+
+  $parsers->{$_} = $flat_list foreach qw(
+    commands notcommands channels tagtypes urlhandlers listplaylist
+  );
+
+  $parsers->{$_} = $item foreach qw(
+    currentsong stats idle status addid update
+    readcomments replay_gain_status rescan
+  );
+
+  $parsers->{$_} = $file_list foreach qw(
+    find playlistinfo listallinfo search find playlistid playlistfind
+    listfiles plchanges listplaylistinfo playlistsearch listfind
+  );
+
+  $parsers->{list} = $grouped_list;
+
+  foreach (
+      [ outputs        => [qw( outputid )],  [] ],
+      [ plchangesposid => [qw( cpos )],      [] ],
+      [ listplaylists  => [qw( playlist )],  [] ],
+      [ listmounts     => [qw( mount )],     [] ],
+      [ listneighbors  => [qw( neighbor )],  [] ],
+      [ listall        => [qw( directory )], [qw( file )] ],
+      [ readmessages   => [qw( channel )],   [qw( message )] ],
+      [ lsinfo         => [qw( directory file playlist )], [] ],
+      [ decoders       => [qw( plugin )], [qw( suffix mime_type )] ],
+    ) {
+
+    my ($cmd, $header, $list) = @{$_};
+    $parsers->{$cmd} = sub { $base_list->( $header, $list, @_ ) };
+  }
+
+  $parsers->{playlist} = sub {
+    my $lines = [ map { s/^\w*?://; $_ } @{shift()} ];
+    $flat_list->( $lines, @_ )
+  };
+
+  $parsers->{count} = sub {
+    my $lines = shift;
+    my ($main) = split /:\s+/, $lines->[0], 2;
+    $base_list->( [ $main ], [qw( )], $lines, @_ )
+  };
+
+  $parsers->{sticker} = sub {
+    my $lines = shift;
+    return {} unless scalar @{$lines};
+
+    my $single = ($lines->[0] !~ /^file/);
+
+    my $base = $base_list->( [qw( file )], [qw( sticker )], $lines, @_ );
+    my $return = [ map {
+      $_->{sticker} = { map { split(/=/, $_, 2) } @{$_->{sticker}} }; $_;
+    } @{$base} ];
+
+    return $single ? $return->[0] : $return;
+  };
+}
+
+sub send {
+  my $self = shift;
+  my $opt  = ( ref $_[0] eq 'HASH' ) ? shift : {};
+  my $cb = pop if ref $_[-1] eq 'CODE';
+  my (@commands) = @_;
+
+  # Normalise input
+  if (ref $commands[0] eq 'ARRAY') {
+    @commands = map {
+      ( ref $_ eq 'ARRAY' ) ? join( q{ }, @{$_} ) : $_;
+    } @{$commands[0]};
+  }
+
+  my $command = '';
+  # Remove underscores from command names
+  @commands = map {
+    my $args;
+    ($command, $args) = split /\s/, $_, 2;
+    $command =~ s/_//g unless $command =~ /^replay_gain_/;
+    $args //= q{};
+    "$command $args";
+  } @commands;
+
+  # Create block if command list
+  if (scalar @commands > 1) {
+    unshift @commands, "command_list_begin";
+    push    @commands, "command_list_end";
+  }
+
+  my $parser = $opt->{parser} // $command;
+  $parser = $parsers->{$parser} // $parsers->{none};
+
+  my $cv = AnyEvent->condvar( maybe cb => $cb );
+
+  $self->push_read( sub {
+    my $response = shift;
+    $cv->send( ( $opt->{raw} ) ? $response : $parser->( $response ) );
+  });
+
+  $log->tracef( '> %s', $_ ) foreach @commands;
+  $self->handle->push_write( join("\n", @commands) . "\n" );
+
+  return $cv;
+}
+
+sub get { shift->send( @_ )->recv }
 
 sub until {
   my ($self, $name, $check, $cb) = @_;
@@ -305,71 +338,95 @@ sub until {
   return $wrapper;
 }
 
-sub get {
-  my ($self, $command, @args) = @_;
-  $log->debugf('Blocking command: %s %s', $command, @args);
-
-  my $cv = AnyEvent::condvar;
-
-  my $error = $self->once( error => sub {
-    $log->warn($_[1]);
-    $cv->send;
-  });
-
-  # Read response to command
-  $self->unshift_read( sub {
-    my ($s, $payload) = @_;
-
-    if (scalar @{$self->subsystems}) {
-      $log->debugf('Blocking %s returned', $command);
-
-      $self->send( idle => @{$self->subsystems} );
-      $self->state( 'waiting' );
-    }
-
-    $self->unsubscribe( error => $error );
-    $cv->send( clone $payload );
-  });
-
-  # Read response to noidle
-  if ($self->state eq 'waiting') {
-    $self->unshift_read( sub { } );
-    $self->send( 'noidle' );
-  }
-
-  # Set client as ready to send
-  $self->state( 'ready' );
-
-  $self->send( $command, @args );
-
-  # Block until command returns
-  return $cv->recv;
-}
-
 sub BUILD {
   my ($self, $args) = @_;
 
-  $self->_socket;
-  $self->_ping if $self->keep_alive;
+  $self->socket( $self->_build_socket );
 
-  $self->on( state => sub {
-    my ($s, $state) = @_;
-    $log->debugf('Client is %s', $state);
-  });
+  $self->connect if $self->auto_connect;
+}
+
+sub _build_socket {
+  my $self = shift;
+
+  my $socket = tcp_connect $self->host, $self->port, sub {
+    my ($fh) = @_
+      or die "MPD connect failed: $!";
+
+    $log->debugf('Connecting to %s:%s', $self->host, $self->port);
+    $self->handle(
+      AnyEvent::Handle->new(
+        fh => $fh,
+        on_error => sub {
+          my ($hdl, $fatal, $msg) = @_;
+          $self->emit( error => $msg );
+          $hdl->destroy;
+        },
+      )
+    );
+
+    # TODO: implement password (sent as first message after initial OK)
+    $self->handle->on_read(sub {
+      $self->handle->push_read( line => $self->_parse_block )
+    });
+
+    $self->handle->on_error(sub {
+      my ($h, $fatal, $message) = @_;
+      $self->emit( error => $message // 'Error' );
+      $self->handle(undef);
+    });
+
+    $self->handle->on_eof(sub {
+      my ($h, $fatal, $message) = @_;
+      $self->emit( eof => $message // 'EOF' );
+      $self->handle(undef);
+    });
+  };
+
+  return $socket;
+}
+
+sub reconnect {
+  my $self = shift;
+  $self->socket( undef );
+  $self->socket( $self->_build_socket );
+  return $self;
+}
+
+sub connect {
+  my ($self) = @_;
+
+  return $self if $self->state eq 'ready';
 
   my $cv = AnyEvent->condvar;
   $self->until( state => sub { $_[1] eq 'ready' }, sub {
     $cv->send;
   });
   $cv->recv;
+
+  return $self;
+}
+
+sub emitter {
+  my ($self, @subsystems) = @_;
+
+  my $cv = AnyEvent->condvar;
+  my $idle;
+  $idle = sub {
+    my $o = shift->recv;
+    $self->emit( $o->{changed} );
+    $self->send( idle => @subsystems, $idle );
+  };
+  $self->send( idle => @subsystems, $idle );
+
+  return $cv;
 }
 
 1;
 
 __END__
 
-
-=encoding utf8
+=encoding UTF-8
 
 =head1 NAME
 
@@ -431,7 +488,7 @@ The song database has been changed after an update.
 
 A database update has started or finished.
 
-=item B<stored>_playlist
+=item B<stored_playlist>
 
 A stored playlist has been modified.
 
