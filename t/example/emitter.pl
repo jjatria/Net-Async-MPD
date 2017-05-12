@@ -3,11 +3,11 @@
 use strict;
 use warnings;
 
-use Net::MPD::Emitter;
+use AnyEvent::Net::MPD;
 Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
 my $log = Log::Any->get_logger;
 
-my $mpd = Net::MPD::Emitter->new(
+my $mpd = AnyEvent::Net::MPD->new(
   maybe host => $ARGV[0],
 );
 
