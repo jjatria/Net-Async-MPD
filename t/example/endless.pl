@@ -32,7 +32,7 @@ my $idle; $idle = sub {
           map { $_->{file} } grep { defined $_->{file} } @{$playlist};
 
         # I wish there was a smarter way
-        $mpd->send( { raw => 1 }, 'list_all', sub {
+        $mpd->send( { parser => 'none' }, 'list_all', sub {
           my $list = shift->recv;
           my @files = map { (split /:\s+/, $_, 2)[1] } grep { /^file:/ } @{$list};
 
