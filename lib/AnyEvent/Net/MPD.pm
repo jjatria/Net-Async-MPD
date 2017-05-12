@@ -338,7 +338,8 @@ sub send {
   }
 
   my $parser = $opt->{parser} // $command;
-  $parser = $parsers->{$parser} // $parsers->{none};
+  $parser = $parsers->{$parser} // $parsers->{none}
+    unless ref $parser eq 'CODE';
 
   my $cv = AnyEvent->condvar( $cb ? ( cb => $cb ) : () );
 
@@ -552,6 +553,9 @@ sending to the server (unless the command name requires them).
 
 Specify the parser to use for the response. Parser labels are MPD commands. If
 the requested parser is not found, the fallback C<none> will be used.
+
+Alternatively, if the value itself is a code reference, then that will be
+called with a reference to the raw list of lines as its only argument.
 
 =back
 
