@@ -52,9 +52,6 @@ my $idle; $idle = sub {
 
           my $end = scalar @{$playlist};
           foreach my $file (@new) {
-            use DDP;
-            p $file;
-            warn $file;
             $mpd->send( addid => $file, $end );
             $end++;
           };
