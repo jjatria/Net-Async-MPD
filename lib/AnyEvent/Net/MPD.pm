@@ -68,7 +68,7 @@ has port => (
   is => 'ro',
   isa => Int,
   lazy => 1,
-  default => 6600,
+  default => sub { $ENV{MPD_PORT} // 6600 },
 );
 
 has host => (
