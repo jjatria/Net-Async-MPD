@@ -70,7 +70,9 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
     If the client is not connected, wait until it is. Otherwise, do nothing.
     Returns the client itself;
 
-- **send**
+- **send** $cmd
+- **send** $cmd => @args
+- **send** \[ $cmd1 $cmd2 $cmd3 \]
 
     Send a command to the server in a non-blocking way. This command always returns
     an [AnyEvent](https://metacpan.org/pod/AnyEvent) condvar.
@@ -81,8 +83,9 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
     command.
 
     If called with an array reference, then the value of each of item in that array
-    will be processed as above. If the referenced array contains more than one
-    command, then these will be sent to the server as a command list.
+    will be processed as above (with array references instead of plain lists). If
+    the referenced array contains more than one command, then these will be sent to
+    the server as a command list.
 
     An optional subroutine reference passed as the last argument will be passed to
     the condvar constructor, and fire when the condvar is ready (= when there is a
@@ -96,9 +99,6 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
     Finally, a hash reference with additional options can be passed as the _first_
     argument. Valid keys to use are:
 
-    For ease of use, underscores in the final command name will be removed before
-    sending to the server (unless the command name requires them).
-
     - **parser**
 
         Specify the parser to use for the response. Parser labels are MPD commands. If
@@ -106,6 +106,9 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
 
         Alternatively, if the value itself is a code reference, then that will be
         called with a reference to the raw list of lines as its only argument.
+
+    For ease of use, underscores in the final command name will be removed before
+    sending to the server (unless the command name requires them).
 
 - **get**
 

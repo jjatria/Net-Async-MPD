@@ -521,7 +521,11 @@ server has been established. Defaults to false.
 If the client is not connected, wait until it is. Otherwise, do nothing.
 Returns the client itself;
 
-=item B<send>
+=item B<send> $cmd
+
+=item B<send> $cmd => @args
+
+=item B<send> [ $cmd1 $cmd2 $cmd3 ]
 
 Send a command to the server in a non-blocking way. This command always returns
 an L<AnyEvent> condvar.
@@ -532,8 +536,9 @@ If called with a list, the list will be joined with spaces and sent as the
 command.
 
 If called with an array reference, then the value of each of item in that array
-will be processed as above. If the referenced array contains more than one
-command, then these will be sent to the server as a command list.
+will be processed as above (with array references instead of plain lists). If
+the referenced array contains more than one command, then these will be sent to
+the server as a command list.
 
 An optional subroutine reference passed as the last argument will be passed to
 the condvar constructor, and fire when the condvar is ready (= when there is a
@@ -547,9 +552,6 @@ then the response will be an array reference with the raw lines from the server.
 Finally, a hash reference with additional options can be passed as the I<first>
 argument. Valid keys to use are:
 
-For ease of use, underscores in the final command name will be removed before
-sending to the server (unless the command name requires them).
-
 =over 4
 
 =item B<parser>
@@ -561,6 +563,9 @@ Alternatively, if the value itself is a code reference, then that will be
 called with a reference to the raw list of lines as its only argument.
 
 =back
+
+For ease of use, underscores in the final command name will be removed before
+sending to the server (unless the command name requires them).
 
 =item B<get>
 
