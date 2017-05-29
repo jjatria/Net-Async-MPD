@@ -105,6 +105,10 @@ has [qw( handle socket )] => ( is => 'rw', init_arg => undef, );
           if ($line =~ /OK MPD (.*)/) {
             $log->trace('Connection established');
             $self->{version} = $1;
+
+            $self->send( password => $self->password )
+              if $self->password and $self->state ne 'ready';
+
             $self->state( 'ready' );
           }
           else {
@@ -399,7 +403,6 @@ sub _build_socket {
       )
     );
 
-    # TODO: implement password (sent as first message after initial OK)
     $self->handle->on_read(sub {
       $self->handle->push_read( line => $self->_parse_block )
     });
