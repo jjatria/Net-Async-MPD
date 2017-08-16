@@ -2,9 +2,9 @@ use Test::More;
 use Test::Warnings;
 use Try::Tiny;
 
-use AnyEvent::Net::MPD;
+use Net::Async::MPD;
 
-ok my $mpd = AnyEvent::Net::MPD->new, 'constructor succeeds';
+ok my $mpd = Net::Async::MPD->new, 'constructor succeeds';
 
 # Attributes
 can_ok $mpd, $_ foreach qw( version auto_connect state password host port );
@@ -21,7 +21,7 @@ SKIP: {
   my $send = $mpd->send('ping', sub {
     ok shift, 'Non-blocking response to ping';
   });
-  ok $send->recv, 'Block until response to ping';
+  ok $send->get, 'Block until response to ping';
 };
 
 done_testing();
