@@ -1,17 +1,17 @@
-package AnyEvent::Net::MPD;
+package Net::Async::MPD;
 
 use strict;
 use warnings;
 
-our $VERSION = '0.002';
+our $VERSION = '0';
 
 use Moo;
 use MooX::HandlesVia;
-extends 'AnyEvent::Emitter';
+with 'Role::EventEmitter';
 
-use AnyEvent;
-use AnyEvent::Socket;
-use AnyEvent::Handle;
+use IO::Async::Loop;
+use IO::Socket::IP;
+use Scalar::Util qw( weaken );
 
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
@@ -96,36 +96,46 @@ has [qw( handle socket )] => ( is => 'rw', init_arg => undef, );
   my @buffer;
   sub _parse_block {
     my $self = shift;
+
     return sub {
-      my ($handle, $line) = @_;
+      my ( $handle, $buffref, $eof ) = @_;
 
-      if ($line =~ /\w/) {
-        $log->tracef('< %s', $line);
-        if ($line =~ /^OK/) {
-          if ($line =~ /OK MPD (.*)/) {
-            $log->trace('Connection established');
-            $self->{version} = $1;
+      if ($eof) {
+        $self->emit( eof => 'EOF' );
+        return 1;
+      }
 
-            $self->send( password => $self->password )
-              if $self->password and $self->state ne 'ready';
+      while ( $$buffref =~ s/^(.*)\n// ) {
+        my $line = $1;
 
-            $self->state( 'ready' );
+        if ($line =~ /\w/) {
+          $log->tracef('< %s', $line);
+          if ($line =~ /^OK/) {
+            if ($line =~ /OK MPD (.*)/) {
+              $log->trace('Connection established');
+              $self->{version} = $1;
+
+              $self->send( password => $self->password )
+                if $self->password and $self->state ne 'ready';
+
+              $self->state( 'ready' );
+            }
+            else {
+              $self->shift_read->( \@buffer );
+              @buffer = ();
+            }
           }
-          else {
-            $self->shift_read->( \@buffer );
+          elsif ($line =~ /^ACK/) {
+            return $self->emit(error => $line );
             @buffer = ();
           }
-        }
-        elsif ($line =~ /^ACK/) {
-          return $self->emit(error => $line );
-          @buffer = ();
-        }
-        else {
-          push @buffer, $line;
+          else {
+            push @buffer, $line;
+          }
         }
       }
 
-      $handle->push_read( line => $self->_parse_block );
+      return 0;
     };
   }
 }
@@ -283,27 +293,27 @@ my $parsers = { none => sub { @_ } };
 }
 
 {
-  my $cv;
+  my $future;
 
   sub idle {
     my ($self, @subsystems) = @_;
 
-    $cv = AnyEvent->condvar;
+    $future = IO::Async::Loop->new->new_future;
 
     my $idle;
     $idle = sub {
-      my $o = shift->recv;
-      $self->emit( $o->{changed} );
-      $self->send( idle => @subsystems, $idle ) unless $cv->ready;
+      my $event = shift;
+      $self->emit( $event->{changed} );
+      $self->send( idle => @subsystems, $idle ) unless $future->is_ready;
     };
     $self->send( idle => @subsystems, $idle );
 
-    return $cv;
+    return $future;
   }
 
   sub noidle {
     my ($self) = @_;
-    $cv->send if $cv;
+    $future->done if $future;
     $self->send( 'noidle' );
     return $self;
   }
@@ -345,20 +355,20 @@ sub send {
   $parser = $parsers->{$parser} // $parsers->{none}
     unless ref $parser eq 'CODE';
 
-  my $cv = AnyEvent->condvar( $cb ? ( cb => $cb ) : () );
+  my $future = IO::Async::Loop->new->new_future;
+  $future->on_done( $cb ) if $cb;
 
   $self->push_read( sub {
-    my $response = shift;
-    $cv->send( $parser->( $response ) );
+    $future->done( $parser->( shift ) );
   });
 
   $log->tracef( '> %s', $_ ) foreach @commands;
-  $self->handle->push_write( join("\n", @commands) . "\n" );
+  $self->handle->write( join("\n", @commands) . "\n" );
 
-  return $cv;
+  return $future;
 }
 
-sub get { shift->send( @_ )->recv }
+sub get { shift->send( @_ )->get }
 
 sub until {
   my ($self, $name, $check, $cb) = @_;
@@ -379,48 +389,29 @@ sub until {
 sub BUILD {
   my ($self, $args) = @_;
 
-  $self->socket( $self->_build_socket );
+  $self->handle( $self->_build_handle );
+
+  IO::Async::Loop->new->add( $self->handle );
 
   $self->connect if $self->auto_connect;
 }
 
-sub _build_socket {
+sub _build_handle {
   my $self = shift;
 
-  my $socket = tcp_connect $self->host, $self->port, sub {
-    my ($fh) = @_
-      or die "MPD connect failed: $!";
+  my $socket = IO::Socket::IP->new($self->host . ':' . $self->port)
+    or die "MPD connect failed: $!";
 
-    $log->debugf('Connecting to %s:%s', $self->host, $self->port);
-    $self->handle(
-      AnyEvent::Handle->new(
-        fh => $fh,
-        on_error => sub {
-          my ($hdl, $fatal, $msg) = @_;
-          $self->emit( error => $msg );
-          $hdl->destroy;
-        },
-      )
-    );
+  $log->debugf('Connecting to %s:%s', $self->host, $self->port);
 
-    $self->handle->on_read(sub {
-      $self->handle->push_read( line => $self->_parse_block )
-    });
+  my $on_error = sub { $self->emit( error => shift ) };
 
-    $self->handle->on_error(sub {
-      my ($h, $fatal, $message) = @_;
-      $self->emit( error => $message // 'Error' );
-      $self->handle(undef);
-    });
-
-    $self->handle->on_eof(sub {
-      my ($h, $fatal, $message) = @_;
-      $self->emit( eof => $message // 'EOF' );
-      $self->handle(undef);
-    });
-  };
-
-  return $socket;
+  IO::Async::Stream->new(
+    handle => $socket,
+    on_read_error => sub { $on_error->('Read error: ' . shift) },
+    on_write_error => sub { $on_error->('Write error: ' . shift) },
+    on_read => $self->_parse_block,
+  )
 }
 
 sub connect {
@@ -428,11 +419,11 @@ sub connect {
 
   return $self if $self->state eq 'ready';
 
-  my $cv = AnyEvent->condvar;
+  my $future = IO::Async::Loop->new->new_future;
   $self->until( state => sub { $_[1] eq 'ready' }, sub {
-    $cv->send;
+    $future->done;
   });
-  $cv->recv;
+  $future->get;
 
   return $self;
 }
