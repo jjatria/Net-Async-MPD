@@ -10,6 +10,7 @@ use MooX::HandlesVia;
 with 'Role::EventEmitter';
 
 use IO::Async::Loop;
+use IO::Async::Stream;
 use IO::Socket::IP;
 use Scalar::Util qw( weaken );
 
