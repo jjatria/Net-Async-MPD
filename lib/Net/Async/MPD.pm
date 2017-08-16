@@ -91,7 +91,7 @@ has _uri => (
   },
 );
 
-has [qw( handle socket )] => ( is => 'rw', init_arg => undef, );
+has _handle => ( is => 'rw', init_arg => undef, );
 
 {
   my @buffer;
@@ -364,7 +364,7 @@ sub send {
   });
 
   $log->tracef( '> %s', $_ ) foreach @commands;
-  $self->handle->write( join("\n", @commands) . "\n" );
+  $self->_handle->write( join("\n", @commands) . "\n" );
 
   return $future;
 }
@@ -390,9 +390,9 @@ sub until {
 sub BUILD {
   my ($self, $args) = @_;
 
-  $self->handle( $self->_build_handle );
+  $self->_handle( $self->_build_handle );
 
-  IO::Async::Loop->new->add( $self->handle );
+  IO::Async::Loop->new->add( $self->_handle );
 
   $self->connect if $self->auto_connect;
 }
