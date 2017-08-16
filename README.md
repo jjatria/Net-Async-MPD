@@ -1,12 +1,12 @@
 # NAME
 
-AnyEvent::Net::MPD - A non-blocking interface to MPD
+Net::Async::MPD - A non-blocking interface to MPD
 
 # SYNOPSIS
 
-    use AnyEvent::Net::MPD;
+    use Net::Async::MPD;
 
-    my $mpd = AnyEvent::Net::MPD->new( host => $ARGV[0] )->connect;
+    my $mpd = Net::Async::MPD->new( host => $ARGV[0] )->connect;
 
     my @subsystems = qw( player mixer database );
 
@@ -25,23 +25,23 @@ AnyEvent::Net::MPD - A non-blocking interface to MPD
     my $stats = $mpd->send( 'stats' );
 
     # Or in blocking mode
-    my $status = $mpd->send( 'status' )->recv;
+    my $status = $mpd->send( 'status' )->get;
 
     # Which is the same as
     $status = $mpd->get( 'status' );
 
     print "Server is ", $status->{state}, " state\n";
-    print "Server has ", $stats->recv->{albums}, " albums in the database\n";
+    print "Server has ", $stats->get->{albums}, " albums in the database\n";
 
     # Put the client in looping idle mode
     my $idle = $mpd->idle( @subsystems );
 
     # Set the emitter in motion, until the next call to noidle
-    $idle->recv;
+    $idle->get;
 
 # DESCRIPTION
 
-AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
+Net::Async::MPD provides a non-blocking interface to an MPD server.
 
 # ATTRIBUTES
 
@@ -68,14 +68,14 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
 - **connect**
 
     If the client is not connected, wait until it is. Otherwise, do nothing.
-    Returns the client itself;
+    Returns the client itself.
 
 - **send** $cmd
 - **send** $cmd => @args
 - **send** \[ $cmd1 $cmd2 $cmd3 \]
 
     Send a command to the server in a non-blocking way. This command always returns
-    an [AnyEvent](https://metacpan.org/pod/AnyEvent) condvar.
+    a [Future](https://metacpan.org/pod/Future).
 
     If called with a single string, then that string will be sent as the command.
 
@@ -127,12 +127,12 @@ AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
     If you are using this module for an event-based application (see below), this
     will configure the client to fire the events at the appropriate times.
 
-    Returns an [AnyEvent](https://metacpan.org/pod/AnyEvent) condvar. Blocking on this conditional variable will wait
-    until the next call to **noidle** (see below).
+    Returns a [Future](https://metacpan.org/pod/Future). Waiting on this future will block until the next call to
+    **noidle** (see below).
 
 - **noidle**
 
-    Cancel the client's idle mode. Sends an undefined value to the condvar created
+    Cancel the client's idle mode. Sends an undefined value to the future created
     by **idle** and breaks the internal idle loop.
 
 # EVENTS
@@ -206,6 +206,11 @@ Event descriptions
     A lightweight blocking MPD library. Has fewer dependencies than this one, but
     it does not curently support command lists. I took the idea of allowing for
     underscores in command names from this module.
+
+- [AnyEvent::Net::MPD](https://metacpan.org/pod/AnyEvent::Net::MPD)
+
+    The original version of this module, which used [AnyEvent](https://metacpan.org/pod/AnyEvent). The interface on
+    both of these modules is virtually identical.
 
 - [Audio::MPD](https://metacpan.org/pod/Audio::MPD)
 
