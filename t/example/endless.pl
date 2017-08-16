@@ -5,11 +5,10 @@ use warnings;
 
 use List::Util qw( shuffle );
 use Array::Utils qw( array_minus );
-use AnyEvent;
-use AnyEvent::Net::MPD;
+use Net::Async::MPD;
 use PerlX::Maybe;
 
-my $mpd = AnyEvent::Net::MPD->new(
+my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
   auto_connect => 1,
 );
@@ -23,21 +22,21 @@ my $previous = -1;
 
 my $idle; $idle = sub {
   $mpd->send( 'status', sub {
-    my $status = shift->recv;
+    my $status = shift;
 
     my $current = $status->{songid};
     if ($current ne $previous) {
       $previous = $current;
 
       $mpd->send( 'playlist', sub {
-        my @playlist = @{shift->recv};
+        my @playlist = @{ shift() };
 
         # I wish there was a smarter way
         $mpd->send( { parser => 'none' }, 'list_all', sub {
           my @files =
             map { (split /:\s+/, $_, 2)[1] }
             grep { /^file:/ }
-            @{shift->recv};
+            @{ shift() };
 
           my $all_new = 1;
           my @new;
@@ -71,4 +70,4 @@ my $idle; $idle = sub {
 
 $mpd->send( idle => 'player', $idle );
 
-AnyEvent->condvar->recv;
+IO::Async::Loop->new->run;

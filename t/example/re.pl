@@ -3,12 +3,12 @@
 use strict;
 use warnings;
 
-use AnyEvent::Net::MPD;
+use Net::Async::MPD;
 use Term::ReadLine;
 use PerlX::Maybe;
 use Data::Printer output => 'stdout';
 
-my $mpd = AnyEvent::Net::MPD->new(
+my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
   auto_connect => 1,
 );
@@ -21,8 +21,9 @@ my $OUT = $term->OUT || \*STDOUT;
 
 while ( defined ($_ = $term->readline($prompt)) ) {
   my $cmd = $_;
-  my $cv = $mpd->send( $cmd, sub {
-    my $res = shift->recv;
+
+  my $future = $mpd->send( $cmd, sub {
+    my $res = shift;
     my $has_data =
         ( ref $res eq 'ARRAY' ) ? scalar @{$res}
       : ( ref $res eq 'HASH' )  ? keys   %{$res}
@@ -32,5 +33,5 @@ while ( defined ($_ = $term->readline($prompt)) ) {
     $term->addhistory($cmd) if /\S/;
   });
 
-  $cv->recv;
+  $future->get;
 }

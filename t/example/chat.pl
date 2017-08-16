@@ -4,14 +4,14 @@ use strict;
 use warnings;
 
 use PerlX::Maybe;
-use AnyEvent::Net::MPD;
-use AnyEvent;
+use Net::Async::MPD;
+use IO::Async::Timer::Periodic;
 
 my %accounts = (
-  alice => AnyEvent::Net::MPD->new(
+  alice => Net::Async::MPD->new(
     maybe host => $ARGV[0],
   )->connect,
-  bob => AnyEvent::Net::MPD->new(
+  bob => Net::Async::MPD->new(
     maybe host => $ARGV[0],
   )->connect,
 );
@@ -23,23 +23,22 @@ my %accounts = (
 # channel without subscribers is an error.
 foreach my $name (keys %accounts) {
   my @commands = map { [ subscribe => $_ ] } keys %accounts;
-  $accounts{$name}->send( \@commands )->recv;
+  $accounts{$name}->send( \@commands )->get;
 }
 
 # Check for messages every X seconds
 my $interval = 1;
 
 # Check for messages in channels this account is subscribed to
-my $timer = AnyEvent->timer(
-  after => 1,
+my $timer = IO::Async::Timer::Periodic->new(
   interval => $interval,
-  cb => sub {
+  on_tick => sub {
     # We check for messages for all accounts
     foreach my $name (keys %accounts) {
       $accounts{$name}->send( 'read_messages', sub {
         # The message payload is an array of hashes. Each has the name of the
         # channel (= the sender) and an arrayref with the unseen messages
-        foreach my $channel (@{shift->recv}) {
+        foreach my $channel (@{ shift() }) {
           # Print who said who, and reply. We don't want to be rude!
           my ($sender, $messages) = ($channel->{channel}, $channel->{message});
 
@@ -58,7 +57,10 @@ my $timer = AnyEvent->timer(
   },
 );
 
+$timer->start;
+IO::Async::Loop->new->add( $timer );
+
 # Send the first message
 $accounts{alice}->send( send_message => 'alice', '"Testing..."' );
 
-AnyEvent->condvar->recv;
+IO::Async::Loop->new->run;
