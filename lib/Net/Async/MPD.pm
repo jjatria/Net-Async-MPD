@@ -436,13 +436,13 @@ __END__
 
 =head1 NAME
 
-AnyEvent::Net::MPD - A non-blocking interface to MPD
+Net::Async::MPD - A non-blocking interface to MPD
 
 =head1 SYNOPSIS
 
-  use AnyEvent::Net::MPD;
+  use Net::Async::MPD;
 
-  my $mpd = AnyEvent::Net::MPD->new( host => $ARGV[0] )->connect;
+  my $mpd = Net::Async::MPD->new( host => $ARGV[0] )->connect;
 
   my @subsystems = qw( player mixer database );
 
@@ -461,23 +461,23 @@ AnyEvent::Net::MPD - A non-blocking interface to MPD
   my $stats = $mpd->send( 'stats' );
 
   # Or in blocking mode
-  my $status = $mpd->send( 'status' )->recv;
+  my $status = $mpd->send( 'status' )->get;
 
   # Which is the same as
   $status = $mpd->get( 'status' );
 
   print "Server is ", $status->{state}, " state\n";
-  print "Server has ", $stats->recv->{albums}, " albums in the database\n";
+  print "Server has ", $stats->get->{albums}, " albums in the database\n";
 
   # Put the client in looping idle mode
   my $idle = $mpd->idle( @subsystems );
 
   # Set the emitter in motion, until the next call to noidle
-  $idle->recv;
+  $idle->get;
 
 =head1 DESCRIPTION
 
-AnyEvent::Net::MPD provides a non-blocking interface to an MPD server.
+Net::Async::MPD provides a non-blocking interface to an MPD server.
 
 =head1 ATTRIBUTES
 
@@ -510,7 +510,7 @@ server has been established. Defaults to false.
 =item B<connect>
 
 If the client is not connected, wait until it is. Otherwise, do nothing.
-Returns the client itself;
+Returns the client itself.
 
 =item B<send> $cmd
 
@@ -519,7 +519,7 @@ Returns the client itself;
 =item B<send> [ $cmd1 $cmd2 $cmd3 ]
 
 Send a command to the server in a non-blocking way. This command always returns
-an L<AnyEvent> condvar.
+a L<Future>.
 
 If called with a single string, then that string will be sent as the command.
 
@@ -575,12 +575,12 @@ those subsystems. Otherwise, it will listen to all of them.
 If you are using this module for an event-based application (see below), this
 will configure the client to fire the events at the appropriate times.
 
-Returns an L<AnyEvent> condvar. Blocking on this conditional variable will wait
-until the next call to B<noidle> (see below).
+Returns a L<Future>. Waiting on this future will block until the next call to
+B<noidle> (see below).
 
 =item B<noidle>
 
-Cancel the client's idle mode. Sends an undefined value to the condvar created
+Cancel the client's idle mode. Sends an undefined value to the future created
 by B<idle> and breaks the internal idle loop.
 
 =back
@@ -662,6 +662,11 @@ A message was received on a channel this client is subscribed to.
 A lightweight blocking MPD library. Has fewer dependencies than this one, but
 it does not curently support command lists. I took the idea of allowing for
 underscores in command names from this module.
+
+=item * L<AnyEvent::Net::MPD>
+
+The original version of this module, which used L<AnyEvent>. The interface on
+both of these modules is virtually identical.
 
 =item * L<Audio::MPD>
 
