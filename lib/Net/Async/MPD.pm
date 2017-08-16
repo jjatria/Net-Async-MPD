@@ -3,7 +3,7 @@ package Net::Async::MPD;
 use strict;
 use warnings;
 
-our $VERSION = '0';
+our $VERSION = '0.002';
 
 use Moo;
 use MooX::HandlesVia;
