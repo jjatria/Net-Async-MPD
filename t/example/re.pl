@@ -8,6 +8,7 @@ use Term::ReadLine;
 use PerlX::Maybe;
 use Data::Printer output => 'stdout';
 use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
 
 my $loop = IO::Async::Loop->new;
 
@@ -21,6 +22,16 @@ my $prompt = "# ";
 
 my $term = Term::ReadLine->new('MPD REPL');
 my $OUT = $term->OUT || \*STDOUT;
+
+# Keep the connection alive
+my $timer = IO::Async::Timer::Periodic->new(
+  first_interval => 30,
+  interval => 30,
+  on_tick => sub { $mpd->send( 'ping' ) },
+);
+
+$timer->start;
+$loop->add( $timer );
 
 # Make readline work with inside the event loop
 {
