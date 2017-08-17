@@ -5,14 +5,16 @@ use warnings;
 
 our $VERSION = '0.002';
 
-use Moo;
-use MooX::HandlesVia;
-with 'Role::EventEmitter';
-
 use IO::Async::Loop;
 use IO::Async::Stream;
 use IO::Socket::IP;
 use Scalar::Util qw( weaken );
+
+use namespace::clean;
+
+use Moo;
+use MooX::HandlesVia;
+with 'Role::EventEmitter';
 
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
