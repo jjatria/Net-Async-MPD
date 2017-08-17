@@ -423,14 +423,16 @@ sub _build_handle {
 sub connect {
   my ($self) = @_;
 
+  my $loop = IO::Async::Loop->new;
+
   unless ($self->_handle) {
     $self->_handle( $self->_build_handle );
-    IO::Async::Loop->new->add( $self->_handle );
+    $loop->add( $self->_handle );
   }
 
   return $self if $self->state eq 'ready';
 
-  my $future = IO::Async::Loop->new->new_future;
+  my $future = $loop->new_future;
   $self->until( state => sub { $_[1] eq 'ready' }, sub {
     $future->done;
   });
