@@ -52,8 +52,7 @@ $loop->add( $timer );
   );
 }
 
-while ( defined ($_ = $term->readline($prompt)) ) {
-  my $cmd = $_;
+while ( defined (my $cmd = $term->readline($prompt)) ) {
 
   my $future = $mpd->send( $cmd, sub {
     my $res = shift;
@@ -63,7 +62,7 @@ while ( defined ($_ = $term->readline($prompt)) ) {
       : $res;
 
     p $res if !$@ and $has_data;
-    $term->addhistory($cmd) if /\S/;
+    $term->addhistory($cmd) if $cmd =~ /\S/;
   });
 
   $future->get;
