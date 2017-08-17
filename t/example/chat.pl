@@ -47,11 +47,14 @@ my $timer = IO::Async::Timer::Periodic->new(
           # Print who said who, and reply. We don't want to be rude!
           my ($sender, $messages) = ($channel->{channel}, $channel->{message});
 
-          # Ignore one's own messages
-          next if $sender eq $name;
+          if ($sender eq $name) {
+            print "$name says: $_\n" foreach @{$messages};
+            next;
+          }
 
           foreach my $message (@{$messages}) {
-            print "$sender says: $message\n";
+            next unless $message =~ /(testing|$name)/i;
+
             $accounts{$name}->send(
               send_message => $name, qq{"I hear you, $sender!"}
             );
