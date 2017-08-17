@@ -391,11 +391,6 @@ sub until {
 
 sub BUILD {
   my ($self, $args) = @_;
-
-  $self->_handle( $self->_build_handle );
-
-  IO::Async::Loop->new->add( $self->_handle );
-
   $self->connect if $self->auto_connect;
 }
 
@@ -419,6 +414,11 @@ sub _build_handle {
 
 sub connect {
   my ($self) = @_;
+
+  unless ($self->_handle) {
+    $self->_handle( $self->_build_handle );
+    IO::Async::Loop->new->add( $self->_handle );
+  }
 
   return $self if $self->state eq 'ready';
 
