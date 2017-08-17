@@ -103,11 +103,6 @@ has _handle => ( is => 'rw', init_arg => undef, );
     return sub {
       my ( $handle, $buffref, $eof ) = @_;
 
-      if ($eof) {
-        $self->emit( eof => 'EOF' );
-        return 1;
-      }
-
       while ( $$buffref =~ s/^(.*)\n// ) {
         my $line = $1;
 
@@ -409,6 +404,10 @@ sub _build_handle {
     on_read_error => sub { $on_error->('Read error: ' . shift) },
     on_write_error => sub { $on_error->('Write error: ' . shift) },
     on_read => $self->_parse_block,
+    on_read_eof => sub {
+      $self->emit( eof => 'EOF' );
+      shift->close;
+    },
   )
 }
 
