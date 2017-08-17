@@ -12,7 +12,6 @@ can_ok $mpd, $_ foreach qw( version auto_connect state password host port );
 # Methods
 can_ok $mpd, $_ foreach qw( send get idle noidle connect );
 
-
 SKIP: {
   my $connected = try { $mpd->connect };
   skip 'Cannot connect to MPD server', 3 unless $connected;
