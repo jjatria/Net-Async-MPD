@@ -11,12 +11,9 @@ use IO::Async::Timer::Periodic;
 # Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
 
 my %accounts = (
-  alice => Net::Async::MPD->new(
-    maybe host => $ARGV[0],
-  )->connect,
-  bob => Net::Async::MPD->new(
-    maybe host => $ARGV[0],
-  )->connect,
+  alice   => Net::Async::MPD->new( maybe host => $ARGV[0] )->connect,
+  bob     => Net::Async::MPD->new( maybe host => $ARGV[0] )->connect,
+  charlie => Net::Async::MPD->new( maybe host => $ARGV[0] )->connect,
 );
 
 # Accounts have a channel of their own that they send messages to
