@@ -10,6 +10,9 @@ use Data::Printer output => 'stdout';
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 
+# use Log::Any::Adapter;
+# Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
+
 my $loop = IO::Async::Loop->new;
 
 my $mpd = Net::Async::MPD->new(
