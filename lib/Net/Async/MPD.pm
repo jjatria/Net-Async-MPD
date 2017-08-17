@@ -356,6 +356,9 @@ sub send {
   my $future = IO::Async::Loop->new->new_future;
   $future->on_done( $cb ) if $cb;
 
+  return $future->fail('Connection to MPD server has been lost' )
+    unless $self->_handle;
+
   $self->push_read( sub {
     $future->done( $parser->( shift ) );
   });
