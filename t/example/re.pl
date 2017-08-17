@@ -53,6 +53,7 @@ $loop->add( $timer );
 }
 
 while ( defined (my $cmd = $term->readline($prompt)) ) {
+  next if $cmd eq q{};
 
   my $future = $mpd->send( $cmd, sub {
     my $res = shift;
