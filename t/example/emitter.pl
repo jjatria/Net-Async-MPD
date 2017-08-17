@@ -5,11 +5,9 @@ use warnings;
 
 use Net::Async::MPD;
 use PerlX::Maybe;
-use Log::Any;
-use Log::Any::Adapter;
 
-Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
-my $log = Log::Any->get_logger;
+# use Log::Any::Adapter;
+# Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
 
 my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
