@@ -311,8 +311,13 @@ my $parsers = { none => sub { @_ } };
 
   sub noidle {
     my ($self) = @_;
-    $future->done if $future;
-    $self->send( 'noidle' );
+
+    if ($future and !$future->is_ready) {
+      my $x = $self->send( 'noidle' )
+        ->followed_by( sub { $future->done });
+      return $self;
+    }
+
     return $self;
   }
 }
