@@ -37,6 +37,7 @@ my $timer = IO::Async::Timer::Periodic->new(
     # We check for messages for all accounts
     foreach my $name (keys %accounts) {
       $accounts{$name}->send( 'read_messages', sub {
+
         # The message payload is an array of hashes. Each has the name of the
         # channel (= the sender) and an arrayref with the unseen messages
         foreach my $channel (@{ shift() }) {

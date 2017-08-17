@@ -339,7 +339,7 @@ sub send {
   }
 
   my $command = '';
-  # Remove underscores from command names
+  # Remove underscores from (most) command names
   @commands = map {
     my $args;
     ($command, $args) = split /\s/, $_, 2;
@@ -433,9 +433,10 @@ sub connect {
   return $self if $self->state eq 'ready';
 
   my $future = $loop->new_future;
-  $self->until( state => sub { $_[1] eq 'ready' }, sub {
-    $future->done;
-  });
+  $self->until( state =>
+    sub { $_[1] eq 'ready' },
+    sub { $future->done; }
+  );
   $future->get;
 
   return $self;

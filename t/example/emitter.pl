@@ -21,9 +21,7 @@ foreach my $event (qw(
     mixer output sticker subscription message
   )) {
 
-  $mpd->on( $event => sub {
-    print "$event changed\n";
-  });
+  $mpd->on( $event => sub { print "$event changed\n" });
 }
 
 $mpd->idle->get;
