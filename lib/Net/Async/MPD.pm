@@ -129,7 +129,7 @@ has _handle => ( is => 'rw', init_arg => undef, );
             }
           }
           elsif ($line =~ /^ACK/) {
-            return $self->emit(error => $line );
+            return $self->emit( error => $line );
             @buffer = ();
           }
           else {
