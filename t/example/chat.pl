@@ -62,10 +62,17 @@ my $timer = IO::Async::Timer::Periodic->new(
   },
 );
 
+my $loop = IO::Async::Loop->new;
+my $finished = $loop->new_future;
+
+# Set listeners to finish when/if the connection is closed
+$accounts{$_}->on( close => sub { $finished->done unless $finished->is_ready })
+  foreach keys %accounts;
+
+$loop->add( $timer );
 $timer->start;
-IO::Async::Loop->new->add( $timer );
 
 # Send the first message
 $accounts{alice}->send( send_message => 'alice', '"Testing..."' );
 
-IO::Async::Loop->new->run;
+$finished->get;

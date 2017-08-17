@@ -14,17 +14,24 @@ use IO::Async::Timer::Periodic;
 # Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
 
 my $loop = IO::Async::Loop->new;
+my $term = Term::ReadLine->new('MPD REPL');
 
 my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
   auto_connect => 1,
 );
 
+$mpd->on( error => sub {
+  shift;
+  die "Error: " . shift
+});
+
+$mpd->on( eof => sub {
+  die "EOF received. Going away\n";
+});
+
 print "Connected to MPD (v", $mpd->version, ")\n";
 my $prompt = "# ";
-
-my $term = Term::ReadLine->new('MPD REPL');
-my $OUT = $term->OUT || \*STDOUT;
 
 # Keep the connection alive
 my $timer = IO::Async::Timer::Periodic->new(
