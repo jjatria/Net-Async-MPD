@@ -31,6 +31,7 @@ my $interval = 1;
 
 # Check for messages in channels this account is subscribed to
 my $timer = IO::Async::Timer::Periodic->new(
+  first_interval => 1,
   interval => $interval,
   on_tick => sub {
     # We check for messages for all accounts
