@@ -7,6 +7,9 @@ use PerlX::Maybe;
 use Net::Async::MPD;
 use IO::Async::Timer::Periodic;
 
+# use Log::Any::Adapter;
+# Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
+
 my %accounts = (
   alice => Net::Async::MPD->new(
     maybe host => $ARGV[0],
