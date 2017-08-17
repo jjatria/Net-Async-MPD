@@ -9,9 +9,7 @@ use PerlX::Maybe;
 use Data::Printer output => 'stdout';
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
-
-# use Log::Any::Adapter;
-# Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
+use Log::Any::Adapter;
 
 my $loop = IO::Async::Loop->new;
 my $term = Term::ReadLine->new('MPD REPL');
@@ -66,6 +64,11 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
   next if $cmd eq q{};
   last if $cmd =~ /^(exit|quit)$/;
 
+  if ($cmd =~ /^(?:un)?trace$/) {
+    trace($cmd);
+    next;
+  }
+
   my $future = $mpd->send( $cmd, sub {
     my $res = shift;
     my $has_data =
@@ -78,4 +81,14 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
   });
 
   $future->get;
+}
+
+sub trace {
+  my $cmd = shift;
+  if ($cmd eq 'trace'){
+    Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
+  }
+  else {
+    Log::Any::Adapter->set( 'Null' );
+  }
 }
