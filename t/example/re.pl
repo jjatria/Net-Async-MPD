@@ -7,6 +7,9 @@ use Net::Async::MPD;
 use Term::ReadLine;
 use PerlX::Maybe;
 use Data::Printer output => 'stdout';
+use IO::Async::Loop;
+
+my $loop = IO::Async::Loop->new;
 
 my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
@@ -18,6 +21,25 @@ my $prompt = "# ";
 
 my $term = Term::ReadLine->new('MPD REPL');
 my $OUT = $term->OUT || \*STDOUT;
+
+# Make readline work with inside the event loop
+{
+  my $input;
+  $term->event_loop(
+    # Wait for input
+    sub {
+      $input = $loop->new_future;
+      $input->get;
+    },
+    # Register input
+    sub {
+      $loop->watch_io(
+        handle => shift,
+        on_read_ready => sub { $input->done unless $input->is_ready },
+      );
+    }
+  );
+}
 
 while ( defined ($_ = $term->readline($prompt)) ) {
   my $cmd = $_;
