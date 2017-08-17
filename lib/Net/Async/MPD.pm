@@ -409,13 +409,14 @@ sub _build_handle {
 
   IO::Async::Stream->new(
     handle => $socket,
-    on_read_error => sub { $on_error->('Read error: ' . shift) },
+    on_read_error  => sub { $on_error->('Read error: ' . shift) },
     on_write_error => sub { $on_error->('Write error: ' . shift) },
-    on_read => $self->_parse_block,
-    on_read_eof => sub {
-      $self->emit( eof => 'EOF' );
-      shift->close;
+    on_read_eof    => sub { shift->close },
+    on_closed => sub {
+      $self->_handle(undef);
+      $self->emit( 'close' );
     },
+    on_read => $self->_parse_block,
   )
 }
 
