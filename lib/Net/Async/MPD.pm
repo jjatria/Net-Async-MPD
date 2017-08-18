@@ -325,6 +325,10 @@ my $parsers = { none => sub { @_ } };
 
 sub send {
   my $self = shift;
+
+  croak 'Need commands to send'
+    unless scalar @_;
+
   my $opt  = ( ref $_[0] eq 'HASH' ) ? shift : {};
   my $cb = pop if ref $_[-1] eq 'CODE';
   my (@commands) = @_;
