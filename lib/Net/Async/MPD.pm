@@ -537,7 +537,7 @@ Returns the client itself.
 
 =item B<send> [ $cmd1 $cmd2 $cmd3 ]
 
-Send a command to the server in a non-blocking way. This command always returns
+Send a command to the server in a non-blocking way. This method always returns
 a L<Future>.
 
 If called with a single string, then that string will be sent as the command.
@@ -550,9 +550,9 @@ will be processed as above (with array references instead of plain lists). If
 the referenced array contains more than one command, then these will be sent to
 the server as a command list.
 
-An optional subroutine reference passed as the last argument will be passed to
-the condvar constructor, and fire when the condvar is ready (= when there is a
-response from the server).
+An optional subroutine reference passed as the last argument will be set as the
+the C<on_ready> of the Future, which will fire when there is a response from
+the server.
 
 The response from the server will be parsed with a command-specific parser, to
 provide some structure to the flat lists returned by MPD. If no parser is
