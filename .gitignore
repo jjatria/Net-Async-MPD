@@ -1,1 +1,8 @@
 *~
+*.html
+*cover.*
+cover_db
+digests
+structure
+Makefile
+
