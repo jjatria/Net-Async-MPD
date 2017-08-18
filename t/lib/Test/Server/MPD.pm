@@ -3,9 +3,7 @@ use warnings;
 
 package Test::Server::MPD;
 
-our $VERSION = '1.120990';
-
-# ABSTRACT: automate launching of fake mdp for testing purposes
+our $VERSION = '0';
 
 use Moo;
 
@@ -170,116 +168,133 @@ sub stop {
 
 1;
 
-# =pod
-#
-# =head1 NAME
-#
-# Test::Corpus::Audio::MPD - automate launching of fake mdp for testing purposes
-#
-# =head1 VERSION
-#
-# version 1.120990
-#
-# =head1 SYNOPSIS
-#
-#     use Test::Corpus::Audio::MPD; # die if error
-#     [...]
-#     stop_test_mpd();
-#
-# =head1 DESCRIPTION
-#
-# This module will try to launch a new mpd server for testing purposes.
-# This mpd server will then be used during L<POE::Component::Client::MPD>
-# or L<Audio::MPD> tests.
-#
-# In order to achieve this, the module will create a fake F<mpd.conf> file
-# with the correct pathes (ie, where you untarred the module tarball). It
-# will then check if some mpd server is already running, and stop it if
-# the C<MPD_TEST_OVERRIDE> environment variable is true (die otherwise).
-# Last it will run the test mpd with its newly created configuration file.
-#
-# Everything described above is done automatically when the module
-# is C<use>-d.
-#
-# Once the tests are run, the mpd server will be shut down, and the
-# original one will be relaunched (if there was one).
-#
-# Note that the test mpd will listen to C<localhost>, so you are on the
-# safe side. Note also that the test suite comes with its own ogg files.
-# Those files are 2 seconds tracks recording my voice saying ok, and are
-# freely redistributable under the same license as the code itself.
-#
-# In case you want more control on the test mpd server, you can use the
-# supplied public methods. This might be useful when trying to test
-# connections with mpd server.
-#
-# =head1 METHODS
-#
-# =head2 customize_test_mpd_configuration( [$port] );
-#
-# Create a fake mpd configuration file, based on the file
-# F<mpd.conf.template> located in F<share> subdir. The string PWD will be
-# replaced by the real path (ie, where the tarball has been untarred),
-# while TMP will be replaced by a new temp directory. The string PORT will
-# be replaced by C<$port> if specified, 6600 otherwise (MPD's default).
-#
-# =head2 my $dir = playlist_dir();
-#
-# Return the temp dir where the test playlists will be stored.
-#
-# =head2 start_test_mpd();
-#
-# Start the fake mpd, and die if there were any error.
-#
-# =head2 stop_test_mpd();
-#
-# Kill the fake mpd.
-#
-# =head1 SEE ALSO
-#
-# You can look for information on this module at:
-#
-# =over 4
-#
-# =item * Search CPAN
-#
-# L<http://search.cpan.org/dist/Test-Corpus-Audio-MPD>
-#
-# =item * See open / report bugs
-#
-# L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Test-Corpus-Audio-MPD>
-#
-# =item * Mailing-list (same as L<Audio::MPD>)
-#
-# L<http://groups.google.com/group/audio-mpd>
-#
-# =item * Git repository
-#
-# L<http://github.com/jquelin/test-corpus-audio-mpd>
-#
-# =item * AnnoCPAN: Annotated CPAN documentation
-#
-# L<http://annocpan.org/dist/Test-Corpus-Audio-MPD>
-#
-# =item * CPAN Ratings
-#
-# L<http://cpanratings.perl.org/d/Test-Corpus-Audio-MPD>
-#
-# =back
-#
-# =head1 AUTHOR
-#
-# Jerome Quelin
-#
-# =head1 COPYRIGHT AND LICENSE
-#
-# This software is copyright (c) 2009 by Jerome Quelin.
-#
-# This is free software; you can redistribute it and/or modify it under
-# the same terms as the Perl 5 programming language system itself.
-#
-# =cut
-#
-#
-# __END__
-#
+__END__
+
+=encoding utf-8
+
+=head1 NAME
+
+Test::Server::MPD - Create MPD test servers at whim
+
+=head1 SYNOPSIS
+
+    use Test::Server::MPD;
+
+    my $server = Test::Server::MPD->new(
+      port => '12345', # defaults to 6600 or an empty port
+      profiles => {
+        'letmein' => [qw( read control )],
+      },
+    );
+    $server->start;
+
+    ...
+
+    # You might want to put this in and END block, or
+    # guard it with Scope::Guard, in case your test dies
+    $server->stop;
+
+=head1 DESCRIPTION
+
+This module makes it easy to start and stop MPD server instances for testing.
+
+=head1 ATTRIBUTES
+
+=over 4
+
+=item C<config>
+
+The path to a configfile for the server. If this attribute is set, then that
+file will be used to start the server. If not provided, then the file provided
+as the C<template> attribute will be populated with the rest of the object's
+attributes.
+
+=item C<template>
+
+The path to a config template file. Defaults to a file shipped with this
+distribution. The template uses a very limited version of the mustache
+templating system. It recognises the following keys: C<port>, C<root>, C<host>.
+
+The special key C<profiles> populates the C<password> attributes of the MPD
+config files. If no C<profiles> are provided, this key will instead populate
+the C<default_permissions> value with all permissions.
+
+=item C<port>
+
+The port on which the server will be listening. Defaults to the value of the
+C<MPD_PORT> environment variable, or 6600 if undefined. If 6600 is already in
+use (likely by another MPD server), an empty port will be found using
+L<Net::EmptyPort>.
+
+Note that it is possible (however unlikely) that the port that was found to
+be empty is actually not by the time the server starts.
+
+=item C<host>
+
+The host to use for the server. Defaults to C<localhost>.
+
+=item C<profiles>
+
+A hash reference with as many keys as profiles to use. Keys are the passwords,
+and the values (which should be array references) indicate the permissions
+for that profile.
+
+=item C<bin>
+
+The path to the MPD binary. Defaults to the one found by L<File::Which>. This
+value is not checked until the server is C<start>ed (or C<stop>ped).
+
+=back
+
+=head1 METHODS
+
+=over 4
+
+=item C<start>
+
+Start the MPD server using the object's C<config> file, or one created by the
+object's C<template>. Returns the C<pid> of the server process.
+
+This method will throw an exception if the C<bin> attribute is not set to a
+plain file, or if there was an error starting the server.
+
+=item C<stop>
+
+Stop the MPD server.
+
+This method will throw an exception if the C<bin> attribute is not set to a
+plain file, or if there was an error stopping the server.
+
+=back
+
+=head1 SEE ALSO
+
+=over 4
+
+=item L<Test::Corpus::Audio::MPD>
+
+The inspiration for this module, used by L<POE::Component::MPD> and
+L<Audio::MPD>. The fact that it cannot be made to coexist with a running
+instance of MPD, and that it starts its server automatically upon use,
+partly explain the existance of this module.
+
+=back
+
+=head1 AUTHOR
+
+=over 4
+
+=item *
+
+José Joaquín Atria <jjatria@cpan.org>
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2017 by José Joaquín Atria.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
