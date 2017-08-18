@@ -276,7 +276,7 @@ plain file, or if there was an error stopping the server.
 
 =item L<Test::Corpus::Audio::MPD>
 
-The inspiration for this module, used by L<POE::Component::MPD> and
+The inspiration for this module, used by L<POE::Component::Client::MPD> and
 L<Audio::MPD>. The fact that it cannot be made to coexist with a running
 instance of MPD, and that it starts its server automatically upon use,
 partly explain the existance of this module.
