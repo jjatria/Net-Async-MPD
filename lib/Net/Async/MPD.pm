@@ -115,7 +115,7 @@ has _handle => ( is => 'rw', init_arg => undef, );
               $self->{version} = $1;
 
               $self->send( password => $self->password )
-                if $self->password and $self->state ne 'ready';
+                if $self->password;
 
               $self->state( 'ready' );
             }
