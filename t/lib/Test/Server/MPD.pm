@@ -100,6 +100,9 @@ sub _populate_config {
     $template =~ s/\{\{ $method \}\}/$value/g;
   }
 
+  my $host = $self->host;
+  $template =~ s/\{\{ host \}\}/$host/g;
+
   my $profiles = q{};
   foreach my $password (keys %{$self->profiles}) {
     my @permissions = @{$self->profiles->{$password}};
