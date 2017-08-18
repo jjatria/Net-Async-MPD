@@ -102,7 +102,10 @@ sub _populate_config {
   my $profiles = q{};
   foreach my $password (keys %{$self->profiles}) {
     my @permissions = @{$self->profiles->{$password}};
-    $profiles .= qq{password\t"$password\@} . join(',', @permissions) . qq{"\n}
+    $profiles .=
+        qq{password\t"$password\@}
+      . join(',', @permissions)
+      . qq{"\n}
   }
 
   $profiles = qq{default_permissions\t"read,add,control,admin"\n}
