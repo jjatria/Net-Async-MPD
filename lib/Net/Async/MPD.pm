@@ -125,8 +125,9 @@ has _handle => ( is => 'rw', init_arg => undef, );
             }
           }
           elsif ($line =~ /^ACK/) {
-            return $self->emit( error => $line );
+            $self->emit( error => $line );
             @buffer = ();
+            last;
           }
           else {
             push @buffer, $line;
