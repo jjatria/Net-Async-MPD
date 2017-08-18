@@ -10,10 +10,9 @@ our $VERSION = '1.120990';
 use Moo;
 
 use IO::Async::Loop;
-use Path::Tiny qw( path );
-use File::Share qw( dist_dir dist_file );
+use File::Share qw( dist_file );
 use File::Which qw( which );
-use Readonly;
+use Path::Tiny qw( path );
 use Types::Path::Tiny qw( File Dir );
 use Types::Standard qw( Str Int HashRef ArrayRef Undef );
 use Net::EmptyPort qw( empty_port check_port );
