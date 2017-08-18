@@ -6,7 +6,6 @@ use warnings;
 
 use lib 't/lib';
 use Test::More;
-use Test::Warnings;
 use Test::Server::MPD;
 use Net::Async::MPD;
 use Try::Tiny;
@@ -19,24 +18,13 @@ sub start_server {
   $server->stop if $server and $server->is_running;
 
   $server = Test::Server::MPD->new(@_);
-  diag 'Starting MPD server on port ' . $server->port;
 
   my $start = try { $server->start } catch { $_ };
   plan skip_all => 'Could not start test MPD server' if $start =~ /not/;
 
-  return $server;
-}
+  diag 'Started MPD server on port ' . $server->port;
 
-{
-  try {
-    Net::Async::MPD->new(
-      port => empty_port(),
-      auto_connect => 1,
-    );
-  }
-  catch {
-    like $_, qr/MPD connect failed/i, 'Cannot connect to a non-extant MPD server';
-  };
+  return $server;
 }
 
 start_server(
@@ -129,6 +117,19 @@ my $guard = scope_guard sub {
   });
 
   $thrower->send( setvol => 50, sub { $idle->get })->get;
+}
+
+$server->stop;
+{
+  try {
+    Net::Async::MPD->new(
+      port => empty_port(),
+      auto_connect => 1,
+    );
+  }
+  catch {
+    like $_, qr/MPD connect failed/i, 'Cannot connect to a non-extant MPD server';
+  };
 }
 
 done_testing();
