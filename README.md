@@ -228,7 +228,7 @@ The existing events are the following, as defined by the MPD documentation.
 
 - **close**
 
-    The connection to the serevr has been closed. This event is not part of the
+    The connection to the server has been closed. This event is not part of the
     MPD protocol, and is fired by [Net::Async::MPD](https://metacpan.org/pod/Net::Async::MPD) directly.
 
 - **error**

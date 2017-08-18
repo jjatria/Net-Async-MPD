@@ -703,7 +703,7 @@ A message was received on a channel this client is subscribed to.
 
 =item B<close>
 
-The connection to the serevr has been closed. This event is not part of the
+The connection to the server has been closed. This event is not part of the
 MPD protocol, and is fired by L<Net::Async::MPD> directly.
 
 =item B<error>
