@@ -315,9 +315,8 @@ my $parsers = { none => sub { @_ } };
     my ($self) = @_;
 
     if ($future and !$future->is_ready) {
-      my $x = $self->send( 'noidle' )
-        ->followed_by( sub { $future->done });
-      return $self;
+      $self->send( 'noidle' );
+      $future->done;
     }
 
     return $self;
