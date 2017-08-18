@@ -81,8 +81,6 @@ has _pid => (
   isa => Int|Undef,
 );
 
-use DDP;
-
 sub BUILD {
   my ($self) = @_;
 
