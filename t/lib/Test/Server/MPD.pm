@@ -13,18 +13,21 @@ use IO::Async::Loop;
 use Path::Tiny qw( path );
 use File::Share qw( dist_dir dist_file );
 use File::Which qw( which );
-use Types::Standard qw( HashRef );
 use Readonly;
+use Types::Path::Tiny qw( File Dir );
+use Types::Standard qw( Str Int HashRef ArrayRef Undef );
 use Net::EmptyPort qw( empty_port check_port );
 
 has port => (
   is => 'ro',
+  isa => Int,
   lazy => 1,
   default => sub { check_port(6600) ? empty_port() : 6600 },
 );
 
 has host => (
   is => 'ro',
+  isa => Str,
   lazy => 1,
   default => 'localhost',
 );
@@ -32,12 +35,14 @@ has host => (
 has template => (
   is => 'rw',
   lazy => 1,
+  isa => File,
+  coerce => 1,
   default => sub { path( dist_file('Net-Async-MPD', 'mpd.conf.template') ) },
 );
 
 has profiles => (
   is => 'rw',
-  isa => HashRef,
+  isa => HashRef[ArrayRef],
   lazy => 1,
   default => sub { {} }
 );
@@ -45,25 +50,34 @@ has profiles => (
 has root => (
   is => 'ro',
   lazy => 1,
+  isa => Dir,
+  coerce => 1,
   default => sub { Path::Tiny::tempdir() }
 );
 
 has config => (
   is => 'ro',
   lazy => 1,
+  isa => File,
+  coerce => 1,
   default => sub { $_[0]->_populate_config }
 );
 
 has bin => (
   is => 'ro',
   lazy => 1,
+  isa => File,
+  coerce => 1,
   default => sub {
     which 'mpd'
       or die 'Could not find MPD executable in PATH. Try setting it manually', "\n";
   }
 );
 
-has _pid => ( is => 'rw' );
+has _pid => (
+  is => 'rw',
+  isa => Int|Undef,
+);
 
 use DDP;
 
