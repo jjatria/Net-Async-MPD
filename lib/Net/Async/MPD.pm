@@ -9,6 +9,7 @@ use IO::Async::Loop;
 use IO::Async::Stream;
 use IO::Socket::IP;
 use Scalar::Util qw( weaken );
+use Carp;
 
 use namespace::clean;
 
