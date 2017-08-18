@@ -6,7 +6,7 @@ Net::Async::MPD - A non-blocking interface to MPD
 
     use Net::Async::MPD;
 
-    my $mpd = Net::Async::MPD->new( host => $ARGV[0] )->connect;
+    my $mpd = Net::Async::MPD->new( host => 'localhost' )->connect;
 
     my @subsystems = qw( player mixer database );
 
@@ -30,8 +30,8 @@ Net::Async::MPD - A non-blocking interface to MPD
     # Which is the same as
     $status = $mpd->get( 'status' );
 
-    print "Server is ", $status->{state}, " state\n";
-    print "Server has ", $stats->get->{albums}, " albums in the database\n";
+    print 'Server is in ', $status->{state}, " state\n";
+    print 'Server has ', $stats->get->{albums}, " albums in the database\n";
 
     # Put the client in looping idle mode
     my $idle = $mpd->idle( @subsystems );
