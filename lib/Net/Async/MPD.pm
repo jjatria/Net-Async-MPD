@@ -602,9 +602,40 @@ B<noidle> (see below).
 Cancel the client's idle mode. Sends an undefined value to the future created
 by B<idle> and breaks the internal idle loop.
 
+=item B<version>
+
+Returns the version number of the protocol spoken by the server, and I<not> the
+version of the daemon.
+
+As this is provided by the server, this is C<undef> until after a connection
+has been established with the C<connect> method, or by setting C<auto_connect>
+to true in the constructor.
+
 =back
 
 =head1 EVENTS
+
+L<Net::Async::MPD> does the L<Role::EventEmitter> role, and inherits all the
+methods defined therein. Please refer to that module's documentation for
+information on how to register subscribers to the different events.
+
+=head2 Additional methods
+
+=over 4
+
+=item B<until>
+
+In addition to methods like C<on> and C<once>, provided by
+L<Role::EventEmitter>,this module also exposes an C<until> method, which
+registers a listener until a certain condition is true, and then deregisters it.
+
+The method is called with two subroutine references. The first is unsubscribed
+as a regular listener, and the second is called only then the first one returns
+a true value. At that point, the entire set is unsubscribed.
+
+=back
+
+=head2 Event descriptions
 
 After calling B<idle>, the client will be in idle mode, which means that any
 changes to the specified subsystemswill trigger a signal. When the client
@@ -616,7 +647,7 @@ from the server as the second argument. This can safely be ignored, since the
 server response will normally just hold the name of the subsystem that changed,
 which you already know.
 
-Event descriptions
+The existing events are the following, as defined by the MPD documentation.
 
 =over 4
 
@@ -669,6 +700,16 @@ A client has subscribed or unsubscribed from a channel.
 =item B<message>
 
 A message was received on a channel this client is subscribed to.
+
+=item B<close>
+
+The connection to the serevr has been closed. This event is not part of the
+MPD protocol, and is fired by L<Net::Async::MPD> directly.
+
+=item B<error>
+
+The C<error> event is inherited from L<Role::EventEmitter>. Reer to that
+module's documentation for more information.
 
 =back
 
