@@ -21,7 +21,10 @@ has port => (
   is => 'ro',
   isa => Int,
   lazy => 1,
-  default => sub { check_port(6600) ? empty_port() : 6600 },
+  default => sub {
+    my $port = $ENV{MPD_PORT} // 6600;
+    check_port($port) ? empty_port() : $port;
+  },
 );
 
 has host => (
