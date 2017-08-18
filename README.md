@@ -135,7 +135,34 @@ Net::Async::MPD provides a non-blocking interface to an MPD server.
     Cancel the client's idle mode. Sends an undefined value to the future created
     by **idle** and breaks the internal idle loop.
 
+- **version**
+
+    Returns the version number of the protocol spoken by the server, and _not_ the
+    version of the daemon.
+
+    As this is provided by the server, this is `undef` until after a connection
+    has been established with the `connect` method, or by setting `auto_connect`
+    to true in the constructor.
+
 # EVENTS
+
+[Net::Async::MPD](https://metacpan.org/pod/Net::Async::MPD) does the [Role::EventEmitter](https://metacpan.org/pod/Role::EventEmitter) role, and inherits all the
+methods defined therein. Please refer to that module's documentation for
+information on how to register subscribers to the different events.
+
+## Additional methods
+
+- **until**
+
+    In addition to methods like `on` and `once`, provided by
+    [Role::EventEmitter](https://metacpan.org/pod/Role::EventEmitter),this module also exposes an `until` method, which
+    registers a listener until a certain condition is true, and then deregisters it.
+
+    The method is called with two subroutine references. The first is unsubscribed
+    as a regular listener, and the second is called only then the first one returns
+    a true value. At that point, the entire set is unsubscribed.
+
+## Event descriptions
 
 After calling **idle**, the client will be in idle mode, which means that any
 changes to the specified subsystemswill trigger a signal. When the client
@@ -147,7 +174,7 @@ from the server as the second argument. This can safely be ignored, since the
 server response will normally just hold the name of the subsystem that changed,
 which you already know.
 
-Event descriptions
+The existing events are the following, as defined by the MPD documentation.
 
 - **database**
 
@@ -198,6 +225,16 @@ Event descriptions
 - **message**
 
     A message was received on a channel this client is subscribed to.
+
+- **close**
+
+    The connection to the serevr has been closed. This event is not part of the
+    MPD protocol, and is fired by [Net::Async::MPD](https://metacpan.org/pod/Net::Async::MPD) directly.
+
+- **error**
+
+    The `error` event is inherited from [Role::EventEmitter](https://metacpan.org/pod/Role::EventEmitter). Reer to that
+    module's documentation for more information.
 
 # SEE ALSO
 
