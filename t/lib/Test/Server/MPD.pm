@@ -106,6 +106,10 @@ sub _populate_config {
     my @permissions = @{$self->profiles->{$password}};
     $profiles .= qq{password\t"$password\@} . join(',', @permissions) . qq{"\n}
   }
+
+  $profiles = qq{default_permissions\t"read,add,control,admin"\n}
+    if $profiles eq q{};
+
   $template =~ s/\{\{ profiles \}\}\s*\n/$profiles/g;
 
   my $config = $self->root->child('mpd.conf');
