@@ -69,6 +69,8 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
     next;
   }
 
+  $timer->stop if $cmd =~ /^idle/;
+
   my $future = $mpd->send( $cmd, sub {
     my $res = shift;
     my $has_data =
@@ -81,6 +83,7 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
   });
 
   $future->get;
+  $timer->start unless $timer->is_running
 }
 
 sub trace {
