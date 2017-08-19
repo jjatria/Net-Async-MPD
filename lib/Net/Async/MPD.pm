@@ -8,6 +8,7 @@ our $VERSION = '0.002';
 use IO::Async::Loop;
 use IO::Async::Stream;
 use IO::Socket::IP;
+use Future::Utils qw( repeat );
 use Scalar::Util qw( weaken );
 use Carp;
 
@@ -278,35 +279,32 @@ my $parsers = { none => sub { @_ } };
   };
 }
 
-{
-  my $future;
+sub idle {
+  my ($self, @subsystems) = @_;
 
-  sub idle {
-    my ($self, @subsystems) = @_;
+  $self->{idle_future} = $self->loop->new_future;
 
-    $future = IO::Async::Loop->new->new_future;
+  weaken $self;
+  repeat {
+    $self->send( idle => @subsystems, sub {
+      $self->emit( shift->{changed} );
+    });
+  } until => sub { $self->{idle_future}->is_ready };
 
-    my $idle;
-    $idle = sub {
-      my $event = shift;
-      $self->emit( $event->{changed} );
-      $self->send( idle => @subsystems, $idle ) unless $future->is_ready;
-    };
-    $self->send( idle => @subsystems, $idle );
+  return $self->{idle_future};
+}
 
-    return $future;
-  }
+sub noidle {
+  my ($self) = @_;
 
-  sub noidle {
-    my ($self) = @_;
+  my $idle = $self->{idle_future};
+  return unless defined $idle;
+  return if $idle->is_ready;
 
-    if ($future and !$future->is_ready) {
-      $self->send( 'noidle' );
-      $future->done;
-    }
+  $self->send( 'noidle' );
+  $idle->done;
 
-    return $self;
-  }
+  return;
 }
 
 sub send {
