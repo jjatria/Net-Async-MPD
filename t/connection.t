@@ -12,6 +12,7 @@ use Try::Tiny;
 use IO::Async::Loop;
 use Scope::Guard qw( scope_guard );
 use Net::EmptyPort qw( empty_port );
+use IO::Async::Timer::Periodic;
 
 my $server;
 sub start_server {
@@ -105,18 +106,28 @@ my $guard = scope_guard sub {
     auto_connect => 1,
   );
 
-  is_deeply $catcher->noidle, $catcher, 'noidle does nothing if not idling';
+  is $catcher->noidle, undef, 'noidle does nothing if not idling';
 
-  my $idle = $catcher->idle;
-  $catcher->on( mixer => sub {
+  my $timer = IO::Async::Timer::Periodic->new(
+    first_interval => 1,
+    interval => 1,
+    on_tick => sub { $thrower->send( 'clear' ) },
+  );
+  IO::Async::Loop->new->add($timer);
+  $timer->start;
+
+  $catcher->on( playlist => sub {
     ok 1, 'Caught mixer event';
 
-    # Make sure it works if called more than once
     $catcher->noidle;
     $catcher->noidle;
+
+    ok 1, 'Calling noidle more than once is not a problem';
+
+    $timer->stop;
   });
 
-  $thrower->send( setvol => 50, sub { $idle->get })->get;
+  $catcher->idle->get;
 }
 
 $server->stop;
