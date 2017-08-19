@@ -383,52 +383,46 @@ sub until {
 
 sub BUILD {
   my ($self, $args) = @_;
-  $self->connect if $self->auto_connect;
+  $self->connect->get if $self->auto_connect;
 }
 
-sub _build_handle {
-  my $self = shift;
+sub connect {
+  my ($self) = @_;
+  my $loop = $self->loop;
+  my $connected = $loop->new_future;
+
+  return $connected->done if $self->state eq 'ready';
 
   my $socket = IO::Socket::IP->new($self->host . ':' . $self->port)
-    or die "MPD connect failed: $!";
+    or return $connected->fail("MPD connect failed: $!");
 
   $log->debugf('Connecting to %s:%s', $self->host, $self->port);
 
   my $on_error = sub { $self->emit( error => shift ) };
 
-  IO::Async::Stream->new(
+  my $handle = IO::Async::Stream->new(
     handle => $socket,
     on_read_error  => sub { $on_error->('Read error: '  . shift) },
     on_write_error => sub { $on_error->('Write error: ' . shift) },
     on_read_eof    => sub { shift->close },
     on_closed => sub {
-      $self->_handle(undef);
+      $self->{mpd_handle} = undef;
       $self->emit( 'close' );
     },
     on_read => $self->_parse_block,
-  )
-}
+  );
 
-sub connect {
-  my ($self) = @_;
-
-  my $loop = IO::Async::Loop->new;
-
-  unless ($self->_handle) {
-    $self->_handle( $self->_build_handle );
-    $loop->add( $self->_handle );
+  unless ($self->{mpd_handle}) {
+    $self->{mpd_handle} = $handle;
+    $loop->add( $handle );
   }
 
-  return $self if $self->state eq 'ready';
-
-  my $future = $loop->new_future;
   $self->until( state =>
     sub { $_[1] eq 'ready' },
-    sub { $future->done; }
+    sub { $connected->done; }
   );
-  $future->get;
 
-  return $self;
+  return $connected;
 }
 
 1;
@@ -445,7 +439,10 @@ Net::Async::MPD - A non-blocking interface to MPD
 
   use Net::Async::MPD;
 
-  my $mpd = Net::Async::MPD->new( host => 'localhost' )->connect;
+  my $mpd = Net::Async::MPD->new(
+    host => 'localhost',
+    auto_connect => 1,
+  );
 
   my @subsystems = qw( player mixer database );
 
@@ -512,8 +509,10 @@ server has been established. Defaults to false.
 
 =item B<connect>
 
-If the client is not connected, wait until it is. Otherwise, do nothing.
-Returns the client itself.
+Starts a connection to an MPD server, and returns a L<Future> that will be done
+when the connection is complete (or failed if the connection couldn't be
+established). If the client is already connected, this function will return an
+immediately completed Future.
 
 =item B<send> $cmd
 
