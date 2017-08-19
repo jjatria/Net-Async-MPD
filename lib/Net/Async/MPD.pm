@@ -24,13 +24,6 @@ use Types::Standard qw(
 use Log::Any;
 my $log = Log::Any->get_logger( category => __PACKAGE__ );
 
-has version => (
-  is => 'ro',
-  isa => Str,
-  lazy => 1,
-  init_arg => undef,
-);
-
 has auto_connect => (
   is => 'ro',
   isa => Bool,
@@ -45,6 +38,12 @@ has state => (
   trigger => sub {
     $_[0]->emit( state => $_[0]->{state} );
   },
+);
+
+has loop => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { IO::Async::Loop->new },
 );
 
 has read_queue => (
@@ -82,62 +81,49 @@ has host => (
   default => sub { $ENV{MPD_HOST} // 'localhost' },
 );
 
-has _uri => (
-  is => 'ro',
-  init_arg => undef,
-  lazy => 1,
-  default => sub {
-    my $self = shift;
-      ( $self->password ? $self->password . '@' : q{} )
-    . $self->host
-    . ( $self->port     ? ':' . $self->port     : q{} )
-  },
-);
+sub version { $_[0]->{version} };
 
-has _handle => ( is => 'rw', init_arg => undef, );
+sub _parse_block {
+  my $self = shift;
 
-{
-  my @buffer;
-  sub _parse_block {
-    my $self = shift;
+  return sub {
+    my ( $handle, $buffref, $eof ) = @_;
 
-    return sub {
-      my ( $handle, $buffref, $eof ) = @_;
+    while ( $$buffref =~ s/^(.*)\n// ) {
+      my $line = $1;
 
-      while ( $$buffref =~ s/^(.*)\n// ) {
-        my $line = $1;
+      $log->tracef('Got line: %s', $line);
 
-        if ($line =~ /\w/) {
-          $log->tracef('< %s', $line);
-          if ($line =~ /^OK/) {
-            if ($line =~ /OK MPD (.*)/) {
-              $log->trace('Connection established');
-              $self->{version} = $1;
+      if ($line =~ /\w/) {
+        $log->tracef('< %s', $line);
+        if ($line =~ /^OK/) {
+          if ($line =~ /OK MPD (.*)/) {
+            $log->trace('Connection established');
+            $self->{version} = $1;
 
-              $self->send( password => $self->password )
-                if $self->password;
+            $self->send( password => $self->password )
+              if $self->password;
 
-              $self->state( 'ready' );
-            }
-            else {
-              $self->shift_read->( \@buffer );
-              @buffer = ();
-            }
-          }
-          elsif ($line =~ /^ACK/) {
-            $self->emit( error => $line );
-            @buffer = ();
-            last;
+            $self->state( 'ready' );
           }
           else {
-            push @buffer, $line;
+            $self->shift_read->( $self->{mpd_buffer} );
+            $self->{mpd_buffer} = [];
           }
         }
+        elsif ($line =~ /^ACK/) {
+          $self->emit( error => $line );
+          $self->{mpd_buffer} = [];
+          last;
+        }
+        else {
+          push @{$self->{mpd_buffer}}, $line;
+        }
       }
+    }
 
-      return 0;
-    };
-  }
+    return 0;
+  };
 }
 
 # Set up response parsers for each command
@@ -367,14 +353,14 @@ sub send {
   $future->on_done( $cb ) if $cb;
 
   return $future->fail('No connection to MPD server' )
-    unless $self->_handle;
+    unless $self->{mpd_handle};
 
   $self->push_read( sub {
     $future->done( $parser->( shift ) );
   });
 
   $log->tracef( '> %s', $_ ) foreach @commands;
-  $self->_handle->write( join("\n", @commands) . "\n" );
+  $self->{mpd_handle}->write( join("\n", @commands) . "\n" );
 
   return $future;
 }
