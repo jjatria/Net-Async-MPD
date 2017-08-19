@@ -347,7 +347,7 @@ sub send {
   $parser = $parsers->{$parser} // $parsers->{none}
     unless ref $parser eq 'CODE';
 
-  my $future = IO::Async::Loop->new->new_future;
+  my $future = $self->loop->new_future;
   $future->on_done( $cb ) if $cb;
 
   return $future->fail('No connection to MPD server' )
