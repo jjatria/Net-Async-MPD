@@ -377,6 +377,7 @@ sub until {
     }
   };
   $self->on($name => $wrapper);
+  weaken $wrapper;
 
   return $wrapper;
 }
