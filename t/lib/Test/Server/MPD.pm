@@ -127,7 +127,6 @@ sub start {
   my $loop = IO::Async::Loop->new;
   my $start = $loop->new_future;
 
-  my ( $in, $out ) = IO::Async::OS->pipepair;
   $self->_pid(
     $loop->run_child(
       command => [ $self->bin, $self->config->realpath ],
