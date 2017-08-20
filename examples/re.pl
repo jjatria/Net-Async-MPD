@@ -78,13 +78,8 @@ $mpd->on( close => sub { die "Connection terminated. Going away\n"; });
 
     unless ($in_list) {
       my $future = $mpd->send( \@commands, sub {
-        my $res = shift;
-        my $has_data =
-            ( ref $res eq 'ARRAY' ) ? scalar @{$res}
-          : ( ref $res eq 'HASH' )  ? keys   %{$res}
-          : $res;
-
-        p @res if !$@ and $has_data;
+        my @res = @_;
+        p @res if !$@ and scalar @res;
       });
 
       try { $future->get } catch { warn $_ };
