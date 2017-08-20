@@ -337,8 +337,10 @@ sub send {
 
   # Ensure a command list if sending multiple commands
   if (scalar @commands > 1) {
-    unshift @commands, "command_list_begin";
-    push    @commands, "command_list_end";
+    unshift @commands, 'command_list_begin'
+      unless $commands[0] =~ /^command_list/;
+    push @commands, 'command_list_end'
+      unless $commands[-1] =~ /^command_list/;
   }
 
   my $parser = $opt->{parser} // $command;
