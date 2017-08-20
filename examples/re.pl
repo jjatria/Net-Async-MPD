@@ -57,30 +57,43 @@ $loop->add( $timer );
 
 $mpd->on( close => sub { die "Connection terminated. Going away\n"; });
 
-while ( defined (my $cmd = $term->readline($prompt)) ) {
-  next if $cmd eq q{};
-  last if $cmd =~ /^(exit|quit)$/;
+{
+  my @commands;
+  my $in_list = 0;
 
-  if ($cmd =~ /^debug ?(\w+)?$/) {
-    debug($1) and next;
+  while ( defined (my $cmd = $term->readline($prompt)) ) {
+    next if $cmd eq q{};
+    last if $cmd =~ /^(?:e(?:xit)?|q(?:uit)?)$/;
+
+    if ($cmd =~ /^debug ?(\w+)?$/) {
+      debug($1) and next;
+    }
+
+    $timer->stop if $cmd =~ /^idle/;
+
+    if    ($cmd =~ /command_list_(?:ok_)?begin/) { $in_list = 1 }
+    elsif ($cmd eq 'command_list_end')           { $in_list = 0 }
+
+    push @commands, $cmd;
+
+    unless ($in_list) {
+      my $future = $mpd->send( \@commands, sub {
+        my $res = shift;
+        my $has_data =
+            ( ref $res eq 'ARRAY' ) ? scalar @{$res}
+          : ( ref $res eq 'HASH' )  ? keys   %{$res}
+          : $res;
+
+        p @res if !$@ and $has_data;
+      });
+
+      try { $future->get } catch { warn $_ };
+
+      $term->addhistory(shift @commands) while @commands;
+    }
+
+    $timer->start unless $timer->is_running
   }
-
-  $timer->stop if $cmd =~ /^idle/;
-
-  my $future = $mpd->send( $cmd, sub {
-    my $res = shift;
-    my $has_data =
-        ( ref $res eq 'ARRAY' ) ? scalar @{$res}
-      : ( ref $res eq 'HASH' )  ? keys   %{$res}
-      : $res;
-
-    p $res if !$@ and $has_data;
-    $term->addhistory($cmd) if $cmd =~ /\S/;
-  });
-
-  try { $future->get } catch { warn $_ };
-
-  $timer->start unless $timer->is_running
 }
 
 sub debug {
