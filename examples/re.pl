@@ -11,6 +11,9 @@ use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Log::Any::Adapter;
 
+my $debug = 0;
+debug($debug);
+
 my $loop = IO::Async::Loop->new;
 my $term = Term::ReadLine->new('MPD REPL');
 
@@ -64,9 +67,8 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
   next if $cmd eq q{};
   last if $cmd =~ /^(exit|quit)$/;
 
-  if ($cmd =~ /^(?:un)?trace$/) {
-    trace($cmd);
-    next;
+  if ($cmd =~ /^debug ?(\w+)?$/) {
+    debug($1) and next;
   }
 
   $timer->stop if $cmd =~ /^idle/;
@@ -86,12 +88,17 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
   $timer->start unless $timer->is_running
 }
 
-sub trace {
-  my $cmd = shift;
-  if ($cmd eq 'trace'){
+sub debug {
+  $debug = defined $_[0] ? $_[0] : (1 - $debug);
+
+  if ($debug){
+    print "Tracing messages\n";
     Log::Any::Adapter->set( 'Stderr', log_level => 'trace' );
   }
   else {
+    print "No message tracing\n";
     Log::Any::Adapter->set( 'Null' );
   }
+
+  return 1;
 }
