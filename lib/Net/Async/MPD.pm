@@ -108,12 +108,12 @@ sub _parse_block {
             $self->state( 'ready' );
           }
           else {
-            $self->shift_read->( $self->{mpd_buffer} );
+            $self->shift_read->( 1, $self->{mpd_buffer} );
             $self->{mpd_buffer} = [];
           }
         }
         elsif ($line =~ /^ACK/) {
-          $self->emit( error => $line );
+          $self->shift_read->( 0, $line );
           $self->{mpd_buffer} = [];
           last;
         }
@@ -354,7 +354,15 @@ sub send {
     unless $self->{mpd_handle};
 
   $self->push_read( sub {
-    $future->done( $parser->( shift ) );
+    my ($success, $result) = @_;
+
+    if ($success) {
+      $future->done( $parser->( $result ) );
+    }
+    else {
+      $self->emit( error => $result );
+      $future->fail( $result );
+    }
   });
 
   $log->tracef( '> %s', $_ ) foreach @commands;
@@ -385,6 +393,7 @@ sub until {
 sub BUILD {
   my ($self, $args) = @_;
   $self->connect->get if $self->auto_connect;
+  $self->catch( sub {} );
 }
 
 sub connect {
@@ -479,6 +488,24 @@ Net::Async::MPD - A non-blocking interface to MPD
 =head1 DESCRIPTION
 
 Net::Async::MPD provides a non-blocking interface to an MPD server.
+
+=head2 Error Handling
+
+Most operations in this module return L<Future> objects, and to keep things
+consistent, any errors that are encountered during processing will result in
+those futures being failed or canceled as appropriate.
+
+This module I<also> makes use of the events in L<Role::EventEmitter>, which
+provides it's own method for error handling: the C<error> event. Normally,
+if a class C<does> that role, it is expected that users will register some
+listener to the C<error> event to handle failures. However, since errors are
+alredy being handled by the Futures (one woudl hope), this distribution
+registers a dummy listener to the C<error> event, and turns into one that is
+mostly useful for debugging and monitoring.
+
+Of course, the author cannot really stop overly zealous users from
+L<unsubscribing|Role::EventEmitter/unsubscribe> the error dummy listener, but
+they do so at their own risk.
 
 =head1 ATTRIBUTES
 
@@ -692,8 +719,9 @@ MPD protocol, and is fired by L<Net::Async::MPD> directly.
 
 =item B<error>
 
-The C<error> event is inherited from L<Role::EventEmitter>. Reer to that
-module's documentation for more information.
+The C<error> event is inherited from L<Role::EventEmitter>. However, unlike
+stated in that module's documentation, and as explained in L</"Error Handling">,
+users are I<not> required to register to this event for safe execution.
 
 =back
 
