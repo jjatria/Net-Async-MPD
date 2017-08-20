@@ -106,17 +106,21 @@ sub _parse_block {
             $self->state( 'ready' );
           }
           else {
+            pop @{$self->{mpd_buffer}} unless @{$self->{mpd_buffer}[-1]};
             $self->shift_read->( 1, $self->{mpd_buffer} );
-            $self->{mpd_buffer} = [];
+            $self->{mpd_buffer} = [[]];
           }
+        }
+        elsif ($line =~ /^list_OK/) {
+          push @{$self->{mpd_buffer}}, [];
         }
         elsif ($line =~ /^ACK/) {
           $self->shift_read->( 0, $line );
-          $self->{mpd_buffer} = [];
+          $self->{mpd_buffer} = [[]];
           last;
         }
         else {
-          push @{$self->{mpd_buffer}}, $line;
+          push @{$self->{mpd_buffer}[-1]}, $line;
         }
       }
     }
@@ -129,10 +133,12 @@ sub _parse_block {
 my $parsers = { none => sub { @_ } };
 {
   my $item = sub {
-    return { map {
-      my ($key, $value) = split /: /, $_, 2;
-      $key => $value;
-    } @{$_[0]} };
+    return {
+      map {
+        my ($key, $value) = split /: /, $_, 2;
+        $key => $value;
+      } @{$_[0]}
+    };
   };
 
   my $flat_list = sub { [ map { (split /: /, $_, 2)[1] } @{$_[0]} ] };
@@ -337,15 +343,41 @@ sub send {
 
   # Ensure a command list if sending multiple commands
   if (scalar @commands > 1) {
-    unshift @commands, 'command_list_begin'
+    my $list = $opt->{list} // 1;
+    my $list_start =
+      'command_list' . ( $list ? '_ok' : q{} ) . '_begin';
+
+    unshift @commands, $list_start
       unless $commands[0] =~ /^command_list/;
     push @commands, 'command_list_end'
       unless $commands[-1] =~ /^command_list/;
   }
 
-  my $parser = $opt->{parser} // $command;
-  $parser = $parsers->{$parser} // $parsers->{none}
-    unless ref $parser eq 'CODE';
+  my $parser;
+
+  if (defined $opt->{parser}) {
+    my $input = delete $opt->{parser};
+    $parser = (ref $input eq 'CODE') ? $input : $parsers->{$input};
+    croak 'Not a code reference or recognised parser name'
+      unless defined $parser;
+  }
+  else {
+    $parser = sub {
+      my ($input, $commands) = @_;
+
+      my @result =  map {
+        my $command;
+        do { $command = shift @{$commands} }
+          until !defined $command or $command !~ /^command_list/;
+
+        my $sub = $parsers->{$command // ''} // $parsers->{none};
+
+        $sub->( $input->[$_] );
+      } 0 .. $#{$input};
+
+      return @result
+    };
+  }
 
   my $future = $self->loop->new_future;
   $future->on_done( $cb ) if $cb;
@@ -357,7 +389,9 @@ sub send {
     my ($success, $result) = @_;
 
     if ($success) {
-      $future->done( $parser->( $result ) );
+      $future->done( $parser->(
+        $result, [ map { my ($name) = split /\s/, $_, 2 } @commands ]
+      ));
     }
     else {
       $self->emit( error => $result );
@@ -394,6 +428,7 @@ sub BUILD {
   my ($self, $args) = @_;
   $self->connect->get if $self->auto_connect;
   $self->catch( sub {} );
+  $self->{mpd_buffer} = [[]];
 }
 
 sub connect {
@@ -487,7 +522,20 @@ Net::Async::MPD - A non-blocking interface to MPD
 
 =head1 DESCRIPTION
 
-Net::Async::MPD provides a non-blocking interface to an MPD server.
+L<Net::Async::MPD> provides a non-blocking interface to an MPD server.
+
+=head2 Command Lists
+
+MPD supports sending command lists to make it easier to perform a series of
+steps as a single one. No command is executed until all commands in the list
+have been sent, and then the server returns the result for all of them together.
+See the
+L<MPD documentation||https://musicpd.org/doc/protocol/command_lists.html>
+for more information.
+
+L<Net::Async::MPD> fully supports sending command lists, and makes it easy to
+structure the results received from MPD, or not to if the user so desires. See
+the L</send> method for more information.
 
 =head2 Error Handling
 
@@ -506,6 +554,45 @@ mostly useful for debugging and monitoring.
 Of course, the author cannot really stop overly zealous users from
 L<unsubscribing|Role::EventEmitter/unsubscribe> the error dummy listener, but
 they do so at their own risk.
+
+=head2 Server Responses
+
+MPD normally returns results as a flat list of response lines.
+L<Net::Async::MPD> tries to make it easier to provide some structure to these
+responses by providing pre-set parser subroutines for each command. Although
+the default parser will be fine in most cases, it is possible to override this
+with a custom parser, or to disable the parsing entirely to get the raw lines
+from the server. For information on how to override the parser, see the
+documentation for the L</send> method.
+
+By default, the results of each command are parsed independently, and passed
+to the L<Future> returned by the corresponding call to L</send>. This is true
+regardless of whether those commands were sent as part of a list or not.
+
+This means that, by default, the L<Future> that represents a given call to
+L</send> will receive the results of as many commands as were originall sent.
+
+This might not be desireable when eg. sending multiple commands whose results
+should be aggregated. In those cases, it is possible to flatten the list by
+passing a false value to the C<list> option to L</send> or L</get>.
+
+This means that when calling
+
+    ($stats, $status) = $mpd->get(
+      { list => 1 }, # This is the default
+      [ 'stats', 'status' ]
+    );
+
+C<$stats> and C<$status> will each have a hash reference with the results
+of their respective commands; while when calling
+
+    $combined_list = $mpd->get( { list => 0 }, [
+      [ search => artist => '"Tom Waits"'   ],
+      [ search => artist => '"David Bowie"' ],
+    ]);
+
+C<$combined_list> will hold an array reference with the combined results of
+both C<search> commands.
 
 =head1 ATTRIBUTES
 
@@ -542,46 +629,76 @@ when the connection is complete (or failed if the connection couldn't be
 established). If the client is already connected, this function will return an
 immediately completed Future.
 
-=item B<send> $cmd
+=item B<send>
 
-=item B<send> $cmd => @args
+    $future = $mpd->send( 'status' );
+    $future = $mpd->send( { parser => 'none' }, 'stats' );
 
-=item B<send> [ $cmd1 $cmd2 $cmd3 ]
+    $future = $mpd->send( search => artist => '"Tom Waits"' );
 
-Send a command to the server in a non-blocking way. This method always returns
-a L<Future>.
+    # Note the dumb string quoting
+    $future = $mpd->send( { list => 0 }, [
+      [ search => artist => '"Tom Waits"'   ],
+      [ search => artist => '"David Bowie"' ],
+    ]);
 
-If called with a single string, then that string will be sent as the command.
+    $future = $mpd->send( \%options, 'stats', sub { ... } );
 
-If called with a list, the list will be joined with spaces and sent as the
+Asynchronously sends a command to an MPD server, and returns a L<Future>. For
+information on what the value of this Future will be, please see the L</"Server Responses"> section.
+
+This method can be called in a number of different ways:
+
+=over 4
+
+=item * If called with a single string, then that string will be sent as the
 command.
 
-If called with an array reference, then the value of each of item in that array
-will be processed as above (with array references instead of plain lists). If
-the referenced array contains more than one command, then these will be sent to
-the server as a command list.
+=item * If called with a list, the list will be joined with spaces and sent as
+the command.
+
+=item * If called with an array reference, then the value of each of item in
+that array will be processed as above (with array references instead of plain
+lists).
+
+=back
+
+If sending multiple commands in one request, the C<command_list...> commands
+can be left out and they will be automatically provided for you.
 
 An optional subroutine reference passed as the last argument will be set as the
 the C<on_ready> of the Future, which will fire when there is a response from
 the server.
 
-The response from the server will be parsed with a command-specific parser, to
-provide some structure to the flat lists returned by MPD. If no parser is
-found, or if the user specifically asks for no parser to be used (see below),
-then the response will be an array reference with the raw lines from the server.
-
-Finally, a hash reference with additional options can be passed as the I<first>
+A hash reference with additional options can be passed as the I<first>
 argument. Valid keys to use are:
 
 =over 4
 
+=item B<list>
+
+If set to false, results of command lists will be parsed as a single result.
+When set to true, each command in a command list is aprsed independently. See
+L</"Server Responses"> for more details.
+
+Defaults to true. This value is ignored when not sending a command list.
+
 =item B<parser>
 
-Specify the parser to use for the response. Parser labels are MPD commands. If
-the requested parser is not found, the fallback C<none> will be used.
+Specify the parser to use for the I<entire> response. Parser labels are MPD
+commands. If the requested parser is not found, the fallback C<none> will be
+used.
 
 Alternatively, if the value itself is a code reference, then that will be
-called with a reference to the raw list of lines as its only argument.
+called as
+
+    $parser->( \@response_lines, \@command_names );
+
+Where each element in C<@response_lines> is a reference to the list of lines
+received after completing the corresponding element in C<@command_names>.
+
+When setting C<list> to false, C<@response_lines> will have a single value,
+regardless of how many commands were sent.
 
 =back
 
