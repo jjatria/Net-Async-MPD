@@ -10,6 +10,7 @@ use Data::Printer output => 'stdout';
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Log::Any::Adapter;
+use Try::Tiny;
 
 my $debug = 0;
 debug($debug);
@@ -21,15 +22,6 @@ my $mpd = Net::Async::MPD->new(
   maybe host => $ARGV[0],
   auto_connect => 1,
 );
-
-$mpd->on( error => sub {
-  shift;
-  die "Error: " . shift
-});
-
-$mpd->on( eof => sub {
-  die "EOF received. Going away\n";
-});
 
 print "Connected to MPD (v", $mpd->version, ")\n";
 my $prompt = "# ";
@@ -63,6 +55,8 @@ $loop->add( $timer );
   );
 }
 
+$mpd->on( close => sub { die "Connection terminated. Going away\n"; });
+
 while ( defined (my $cmd = $term->readline($prompt)) ) {
   next if $cmd eq q{};
   last if $cmd =~ /^(exit|quit)$/;
@@ -84,7 +78,8 @@ while ( defined (my $cmd = $term->readline($prompt)) ) {
     $term->addhistory($cmd) if $cmd =~ /\S/;
   });
 
-  $future->get;
+  try { $future->get } catch { warn $_ };
+
   $timer->start unless $timer->is_running
 }
 
