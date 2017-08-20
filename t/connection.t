@@ -40,8 +40,10 @@ start_server(
     auto_connect => 1,
   );
   my $future = $client->send('status');
-  $client->catch( sub { ok 1, 'Caught forbidden command'; $future->done });
-  $future->get;
+  $client->catch( sub { ok 1, 'Error triggers error event' });
+
+  try { $future->get }
+  catch { like $_, qr/have permission/i, 'Caught forbidden command' };
 
   $client = Net::Async::MPD->new(
     port => $server->port,
