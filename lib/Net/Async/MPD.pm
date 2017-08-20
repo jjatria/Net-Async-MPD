@@ -16,7 +16,7 @@ use namespace::clean;
 
 use Moo;
 use MooX::HandlesVia;
-with 'Role::EventEmitter';
+with 'Role::EventDistributor';
 
 use Types::Standard qw(
   InstanceOf Int ArrayRef HashRef Str Maybe Bool CodeRef
@@ -36,9 +36,7 @@ has state => (
   isa => Str,
   init_arg => undef,
   default => 'created',
-  trigger => sub {
-    $_[0]->emit( state => $_[0]->{state} );
-  },
+  trigger => sub { my $x = $_[0]->emit( state => $_[0]->{state} ) },
 );
 
 has loop => (
@@ -290,9 +288,10 @@ sub idle {
 
   weaken $self;
   repeat {
-    $self->send( idle => @subsystems, sub {
-      $self->emit( shift->{changed} );
-    });
+    $self->send( idle => @subsystems )
+      ->then( sub {
+        $self->emit( shift->{changed} );
+      });
   } until => sub { $self->{idle_future}->is_ready };
 
   return $self->{idle_future};
@@ -394,7 +393,7 @@ sub send {
       ));
     }
     else {
-      $self->emit( error => $result );
+      my $x = $self->emit( error => $result );
       $future->fail( $result );
     }
   });
@@ -406,23 +405,6 @@ sub send {
 }
 
 sub get { shift->send( @_ )->get }
-
-sub until {
-  my ($self, $name, $check, $cb) = @_;
-
-  weaken $self;
-  my $wrapper;
-  $wrapper = sub {
-    if ($check->(@_)) {
-      $self->unsubscribe($name => $wrapper);
-      $cb->(@_);
-    }
-  };
-  $self->on($name => $wrapper);
-  weaken $wrapper;
-
-  return $wrapper;
-}
 
 sub BUILD {
   my ($self, $args) = @_;
@@ -543,7 +525,7 @@ Most operations in this module return L<Future> objects, and to keep things
 consistent, any errors that are encountered during processing will result in
 those futures being failed or canceled as appropriate.
 
-This module I<also> makes use of the events in L<Role::EventEmitter>, which
+This module I<also> makes use of the events in L<Role::EventDistributor>, which
 provides it's own method for error handling: the C<error> event. Normally,
 if a class C<does> that role, it is expected that users will register some
 listener to the C<error> event to handle failures. However, since errors are
@@ -552,8 +534,8 @@ registers a dummy listener to the C<error> event, and turns into one that is
 mostly useful for debugging and monitoring.
 
 Of course, the author cannot really stop overly zealous users from
-L<unsubscribing|Role::EventEmitter/unsubscribe> the error dummy listener, but
-they do so at their own risk.
+L<unsubscribing|Role::EventDistributor/unsubscribe> the error dummy listener,
+but they do so at their own risk.
 
 =head2 Server Responses
 
@@ -743,25 +725,9 @@ to true in the constructor.
 
 =head1 EVENTS
 
-L<Net::Async::MPD> does the L<Role::EventEmitter> role, and inherits all the
+L<Net::Async::MPD> does the L<Role::EventDistributor> role, and inherits all the
 methods defined therein. Please refer to that module's documentation for
 information on how to register subscribers to the different events.
-
-=head2 Additional methods
-
-=over 4
-
-=item B<until>
-
-In addition to methods like C<on> and C<once>, provided by
-L<Role::EventEmitter>,this module also exposes an C<until> method, which
-registers a listener until a certain condition is true, and then deregisters it.
-
-The method is called with two subroutine references. The first is unsubscribed
-as a regular listener, and the second is called only then the first one returns
-a true value. At that point, the entire set is unsubscribed.
-
-=back
 
 =head2 Event descriptions
 
@@ -842,7 +808,7 @@ MPD protocol, and is fired by L<Net::Async::MPD> directly.
 
 =item B<error>
 
-The C<error> event is inherited from L<Role::EventEmitter>. However, unlike
+The C<error> event is inherited from L<Role::EventDistributor>. However, unlike
 stated in that module's documentation, and as explained in L</"Error Handling">,
 users are I<not> required to register to this event for safe execution.
 
