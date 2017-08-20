@@ -83,15 +83,24 @@ my $guard = scope_guard sub {
   });
   $future->get;
 
-  $client->send([
-    [ setvol => 50 ],
-    [ volume => 1 ],
-    'stats',
-  ], sub {
-    my $stats = shift;
-    ok 1, 'Sent a command list';
-    is ref $stats, 'HASH', 'Received result from last command';
-  });
+  $client->send({ list => 1 }, [ 'stats', 'status' ],
+    sub {
+      ok 1, 'Sent a command list';
+      is scalar @_, 2, 'Received multiple results from list';
+
+      my ($stats, $status) = @_;
+      is ref $stats, 'HASH', 'Received results from each command';
+    }
+  );
+
+  $client->send({ list => 0 }, [ 'stats', 'status' ],
+    sub {
+      is scalar @_, 1, 'Received a single result from list';
+
+      my ($combined) = @_;
+      is ref $combined, 'HASH', 'Received results from each command';
+    }
+  );
 
   $client->send( { parser => sub { ok 1, 'Custom parser' } }, 'ping' )->get;
 }
