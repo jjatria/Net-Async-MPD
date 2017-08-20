@@ -829,6 +829,12 @@ A client has subscribed or unsubscribed from a channel.
 
 A message was received on a channel this client is subscribed to.
 
+=back
+
+=head2 Other events
+
+=over 4
+
 =item B<close>
 
 The connection to the server has been closed. This event is not part of the
