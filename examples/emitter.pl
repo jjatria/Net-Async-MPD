@@ -17,7 +17,7 @@ my $mpd = Net::Async::MPD->new(
 $mpd->on( close => sub { $mpd->noidle });
 
 foreach my $event (qw(
-    database udpate stored_playlist playlist player
+    database update stored_playlist playlist player
     mixer output sticker subscription message
   )) {
 
