@@ -93,8 +93,6 @@ sub _parse_block {
     while ( $$buffref =~ s/^(.*)\n// ) {
       my $line = $1;
 
-      $log->tracef('Got line: %s', $line);
-
       if ($line =~ /\w/) {
         $log->tracef('< %s', $line);
         if ($line =~ /^OK/) {
@@ -337,7 +335,7 @@ sub send {
     $command . ($args ? " $args" : q{});
   } @commands;
 
-  # Create block if command list
+  # Ensure a command list if sending multiple commands
   if (scalar @commands > 1) {
     unshift @commands, "command_list_begin";
     push    @commands, "command_list_end";
