@@ -22,7 +22,7 @@ my @all_files;
 $mpd->send( { parser => 'none' }, 'list_all', sub {
   @all_files = map { (split /:\s+/, $_, 2)[1] }
     grep { /^file:/ }
-    @{ shift() };
+    @{shift->[0]};
 })->get;
 
 my $total_length = 21;
@@ -30,14 +30,13 @@ my $n = 1;
 my $previous;
 my $future;
 my $repeat = 1;
+my @new_songs;
 
-$mpd->on( close => sub {
-  $repeat = 0;
-  $future->done;
-});
+$mpd->on( close => sub { $repeat = 0 });
 
-sub make_chain {
-  $future = $mpd->send( idle => 'player' )
+use Future::Utils qw( repeat );
+my $endless = repeat {
+  $mpd->send( idle => 'player' )
     ->then( sub {
       return $mpd->send( 'status' );
     })
@@ -57,12 +56,11 @@ sub make_chain {
       my @playlist = @{ shift() };
 
       my $all_new = 1;
-      my @new;
       foreach (0..100) {
         my @indeces = shuffle( 0..$#all_files );
-        @new = @all_files[ @indeces[ 0 .. $n-1 ] ];
+        @new_songs = @all_files[ @indeces[ 0 .. $n-1 ] ];
 
-        my @diff = array_minus( @new, @playlist );
+        my @diff = array_minus( @new_songs, @playlist );
         if (scalar @diff eq $n) { last }
         else { $all_new = 0 }
       }
@@ -71,16 +69,33 @@ sub make_chain {
         unless $all_new;
 
       my $end = scalar @playlist;
-      my @commands = map { [ addid => $_, $end++ ] } @new;
+      my @commands = map { [ addid => $_, $end++ ] } @new_songs;
       push @commands, [ delete => "0:$n" ];
 
       return $mpd->send( \@commands );
     })
+    ->then( sub {
+      $mpd->send( { list_ok => 0 }, [ map { "lsinfo $_" } @new_songs ]);
+    })
+    ->then( sub {
+      my $info = shift;
+      foreach (@{$info}) {
+        my $artist = $_->{AlbumArtist} // $_->{Artist} // '[Unknown Artist]';
+        my $title  = $_->{Title} // '[Unknown Title]';
+
+        if ($artist =~ /^\[unknown/ and $title =~ /^\[unknown/) {
+          print "+ $_->{file}\n";
+        }
+        else {
+          print "+ $artist - $title\n";
+        }
+      }
+
+      return $mpd->loop->done;
+    })
     ->catch(sub {
       $loop->new_future->done
     });
+} while => sub { $repeat };
 
-  return $future;
-}
-
-while ($repeat) { make_chain()->get }
+$endless->get;
