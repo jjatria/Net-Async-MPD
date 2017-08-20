@@ -334,7 +334,7 @@ sub send {
     ($command, $args) = split /\s/, $_, 2;
     $command =~ s/_//g unless $command =~ /^(replay_gain_|command_list)/;
     $args //= q{};
-    "$command $args";
+    $command . ($args ? " $args" : q{});
   } @commands;
 
   # Create block if command list
